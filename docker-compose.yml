@@ -1,0 +1,65 @@
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: lentia-mosquitto
+    ports:
+      - "1883:1883"   # MQTT
+      - "9001:9001"   # MQTT over WebSocket (utilisé par le dashboard)
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - mosquitto-data:/mosquitto/data
+      - mosquitto-log:/mosquitto/log
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: lentia-postgres
+    environment:
+      POSTGRES_USER: lentia
+      POSTGRES_PASSWORD: lentia
+      POSTGRES_DB: lentia
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lentia -d lentia"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: ./api
+    container_name: lentia-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
+    environment:
+      MQTT_HOST: mosquitto
+      MQTT_PORT: 1883
+      MQTT_TOPIC: lentia/sensors/data
+      DATABASE_URL: postgresql://lentia:lentia@postgres:5432/lentia
+    ports:
+      - "5000:5000"   # API REST + dashboard web
+    restart: unless-stopped
+
+  mqtt-test-client:
+    build: ./mqtt-test-client
+    container_name: lentia-test-client
+    depends_on:
+      - mosquitto
+    environment:
+      MQTT_HOST: mosquitto
+      MQTT_PORT: 1883
+      MQTT_TOPIC: lentia/sensors/data
+      PUBLISH_INTERVAL_SECONDS: 5
+    restart: unless-stopped
+
+volumes:
+  mosquitto-data:
+  mosquitto-log:
+  postgres-data:

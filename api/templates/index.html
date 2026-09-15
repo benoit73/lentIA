@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>lentIA — Dashboard</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mqtt@5/dist/mqtt.min.js"></script>
+</head>
+<body>
+  <header>
+    <h1>🌱 lentIA — Suivi du bac de lentilles</h1>
+    <span id="connection-status" class="badge badge--pending">MQTT : connexion…</span>
+  </header>
+
+  <section class="cards" id="cards">
+    <!-- remplies par dashboard.js -->
+  </section>
+
+  <section class="charts" id="charts">
+    <!-- remplies par dashboard.js -->
+  </section>
+
+  <footer>
+    <span id="last-update">En attente de données…</span>
+  </footer>
+
+  <script src="/static/dashboard.js"></script>
+</body>
+</html>
