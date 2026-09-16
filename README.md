@@ -7,10 +7,22 @@ Raspberry Pi, capteurs et réseau de neurones).
 
 | Service            | Rôle                                                                 | Port(s)      |
 |---------------------|-----------------------------------------------------------------------|--------------|
-| `mosquitto`         | Broker MQTT                                                           | 1883, 9001 (WebSocket) |
+| `mosquitto`         | Broker MQTT                                                           | 1883         |
 | `postgres`          | Base de données des relevés                                           | 5432         |
-| `api`               | Flask : s'abonne au MQTT, enregistre en base, expose l'API REST, sert le dashboard | 5000         |
+| `api`               | Flask : s'abonne au MQTT, enregistre en base, expose l'API REST + WebSocket, sert le dashboard | 5000         |
 | `mqtt-test-client`  | Publie des données aléatoires (à remplacer par le vrai Pico W)        | —            |
+
+### Découpage de l'API (`api/`)
+
+| Module            | Rôle                                                                 |
+|--------------------|-----------------------------------------------------------------------|
+| `config.py`        | Configuration (variables d'environnement)                             |
+| `db.py`             | Accès Postgres : écriture des relevés, historique par capteur         |
+| `mqtt_ingest.py`    | Client MQTT interne : abonnement, persistance en base, diffusion temps réel |
+| `realtime.py`       | Pub/sub en mémoire entre `mqtt_ingest` et les routes WebSocket         |
+| `routes.py`         | Routes HTTP REST (santé, liste des capteurs, historique)              |
+| `ws.py`             | Routes WebSocket, une par capteur                                     |
+| `app.py`            | Point d'entrée : assemble l'app Flask et démarre le client MQTT       |
 
 ## Format des messages MQTT
 
@@ -48,19 +60,29 @@ docker compose up --build
 
 Puis ouvrir : http://localhost:5000
 
-- Historique : chargé depuis Postgres via `/api/readings`.
-- Temps réel : le dashboard se connecte directement au broker en MQTT over
-  WebSocket (port 9001) et met à jour les cartes/graphes à chaque message.
+- Historique : chargé depuis Postgres, un fetch par capteur vers
+  `/api/sensors/<capteur>/history`.
+- Temps réel : le dashboard ouvre une connexion WebSocket par capteur vers
+  `/ws/sensors/<capteur>`. L'API garde la connexion MQTT en interne (le
+  navigateur ne parle plus directement au broker).
 
 Pour arrêter : `docker compose down` (ajouter `-v` pour aussi supprimer les
 données stockées).
 
 ## API REST
 
-- `GET /api/readings?limit=200` — historique (plus ancien → plus récent)
-- `GET /api/readings/latest` — dernier relevé enregistré
-- `GET /api/config` — infos de connexion MQTT pour le front (host/port websocket, topic)
+- `GET /api/sensors` — liste des capteurs connus
+- `GET /api/sensors/<capteur>/history?limit=200&start=...&end=...` —
+  historique d'un capteur (plus ancien → plus récent). `limit` (défaut 200,
+  max 2000), `start`/`end` (timestamps ISO 8601, optionnels) bornent la
+  plage.
 - `GET /api/health` — healthcheck
+
+## WebSocket temps réel
+
+- `ws://<host>:5000/ws/sensors/<capteur>` — pousse chaque nouvelle valeur de
+  ce capteur dès qu'un message MQTT correspondant est reçu (payload : la
+  valeur JSON seule, ex. `21.3` ou `null`).
 
 ## Où brancher le vrai matériel
 

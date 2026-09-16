@@ -4,7 +4,6 @@ services:
     container_name: lentia-mosquitto
     ports:
       - "1883:1883"   # MQTT
-      - "9001:9001"   # MQTT over WebSocket (utilisé par le dashboard)
     volumes:
       - ./mosquitto/config:/mosquitto/config
       - mosquitto-data:/mosquitto/data

@@ -1,7 +1,8 @@
 // Dashboard lentIA
-// - Historique : chargé une fois via l'API REST (données en base Postgres)
-// - Temps réel : le navigateur se connecte DIRECTEMENT au broker MQTT
-//   via WebSocket (port 9001) et met à jour cartes + graphes à la volée.
+// - Historique : un fetch par capteur vers /api/sensors/<capteur>/history
+// - Temps réel : une connexion WebSocket par capteur vers /ws/sensors/<capteur>
+//   (l'API relaie en interne les messages reçus sur MQTT, le navigateur ne
+//   parle plus directement au broker).
 
 const METRICS = [
   { key: "soil_humidity", label: "Humidité du sol", unit: "%", color: "#a97142" },
@@ -19,10 +20,21 @@ const statusEl = document.getElementById("connection-status");
 const lastUpdateEl = document.getElementById("last-update");
 
 const charts = {}; // key -> Chart.js instance
+const connectedSensors = new Set();
 
 function setStatus(state, text) {
   statusEl.textContent = text;
   statusEl.className = `badge badge--${state}`;
+}
+
+function updateConnectionStatus() {
+  if (connectedSensors.size === METRICS.length) {
+    setStatus("ok", "Temps réel : connecté");
+  } else if (connectedSensors.size === 0) {
+    setStatus("error", "Temps réel : déconnecté");
+  } else {
+    setStatus("pending", `Temps réel : ${connectedSensors.size}/${METRICS.length} capteurs connectés`);
+  }
 }
 
 function buildCardsAndCharts() {
@@ -72,40 +84,7 @@ function buildCardsAndCharts() {
   });
 }
 
-// Historique REST : une ligne = un relevé partiel (un seul capteur non-null,
-// les autres colonnes sont NULL). On boucle sur METRICS et on ignore les
-// valeurs absentes, comme avant.
-function updateCards(reading) {
-  METRICS.forEach((m) => {
-    const el = document.getElementById(`value-${m.key}`);
-    const v = reading[m.key];
-    if (v !== null && v !== undefined) {
-      el.innerHTML = `${Number(v).toFixed(1)}<span class="unit"> ${m.unit}</span>`;
-    }
-  });
-  const ts = reading.created_at || new Date().toISOString();
-  lastUpdateEl.textContent = `Dernière mise à jour : ${new Date(ts).toLocaleString("fr-FR")}`;
-}
-
-function pushPoint(reading) {
-  const label = new Date(reading.created_at || Date.now()).toLocaleTimeString("fr-FR");
-  METRICS.forEach((m) => {
-    const chart = charts[m.key];
-    const v = reading[m.key];
-    if (v === null || v === undefined) return;
-    chart.data.labels.push(label);
-    chart.data.datasets[0].data.push(v);
-    if (chart.data.labels.length > MAX_POINTS) {
-      chart.data.labels.shift();
-      chart.data.datasets[0].data.shift();
-    }
-    chart.update("none");
-  });
-}
-
-// Temps réel MQTT : un message = un seul capteur (topic lentia/sensors/<capteur>,
-// payload = juste la valeur, ou null). On met à jour uniquement ce capteur-là.
-function updateCardField(key, value) {
+function setCardValue(key, value) {
   const metric = METRICS.find((m) => m.key === key);
   const el = document.getElementById(`value-${key}`);
   if (!metric || !el) return;
@@ -114,13 +93,11 @@ function updateCardField(key, value) {
   } else {
     el.innerHTML = `${Number(value).toFixed(1)}<span class="unit"> ${metric.unit}</span>`;
   }
-  lastUpdateEl.textContent = `Dernière mise à jour : ${new Date().toLocaleString("fr-FR")}`;
 }
 
-function pushChartPoint(key, value) {
+function appendChartPoint(key, value, label) {
   const chart = charts[key];
   if (!chart || value === null || value === undefined) return;
-  const label = new Date().toLocaleTimeString("fr-FR");
   chart.data.labels.push(label);
   chart.data.datasets[0].data.push(value);
   if (chart.data.labels.length > MAX_POINTS) {
@@ -130,47 +107,63 @@ function pushChartPoint(key, value) {
   chart.update("none");
 }
 
-async function loadHistory() {
-  const res = await fetch("/api/readings?limit=" + MAX_POINTS);
+function touchLastUpdate(timestamp) {
+  const ts = timestamp || new Date().toISOString();
+  lastUpdateEl.textContent = `Dernière mise à jour : ${new Date(ts).toLocaleString("fr-FR")}`;
+}
+
+async function loadSensorHistory(key) {
+  const res = await fetch(`/api/sensors/${key}/history?limit=${MAX_POINTS}`);
   const rows = await res.json();
-  rows.forEach((row) => pushPoint(row));
+  rows.forEach((row) => {
+    appendChartPoint(key, row.value, new Date(row.created_at).toLocaleTimeString("fr-FR"));
+  });
   if (rows.length > 0) {
-    updateCards(rows[rows.length - 1]);
+    const last = rows[rows.length - 1];
+    setCardValue(key, last.value);
+    touchLastUpdate(last.created_at);
   }
 }
 
-async function connectMqtt() {
-  const cfgRes = await fetch("/api/config");
-  const cfg = await cfgRes.json();
+async function loadHistory() {
+  await Promise.all(METRICS.map((m) => loadSensorHistory(m.key).catch((err) => {
+    console.error(`Erreur chargement historique (${m.key})`, err);
+  })));
+}
 
-  const url = `ws://${cfg.mqtt_ws_host}:${cfg.mqtt_ws_port}`;
-  const client = mqtt.connect(url, { reconnectPeriod: 3000 });
+function connectSensorSocket(key) {
+  const protocol = location.protocol === "https:" ? "wss" : "ws";
+  const socket = new WebSocket(`${protocol}://${location.host}/ws/sensors/${key}`);
 
-  client.on("connect", () => {
-    setStatus("ok", "MQTT : connecté (temps réel actif)");
-    client.subscribe(cfg.mqtt_topic);
+  socket.addEventListener("open", () => {
+    connectedSensors.add(key);
+    updateConnectionStatus();
   });
 
-  client.on("reconnect", () => setStatus("pending", "MQTT : reconnexion…"));
-  client.on("close", () => setStatus("error", "MQTT : déconnecté"));
-  client.on("error", () => setStatus("error", "MQTT : erreur"));
+  socket.addEventListener("close", () => {
+    connectedSensors.delete(key);
+    updateConnectionStatus();
+    setTimeout(() => connectSensorSocket(key), 3000); // reconnexion automatique
+  });
 
-  client.on("message", (topic, payload) => {
-    const key = topic.split("/").pop();
-    if (!METRICS.some((m) => m.key === key)) return;
+  socket.addEventListener("message", (event) => {
+    let value;
     try {
-      const value = JSON.parse(payload.toString()); // nombre, ou null
-      updateCardField(key, value);
-      pushChartPoint(key, value);
+      value = JSON.parse(event.data);
     } catch (err) {
-      console.error("Message MQTT invalide", err);
+      console.error(`Message WebSocket invalide (${key})`, err);
+      return;
     }
+    setCardValue(key, value);
+    appendChartPoint(key, value, new Date().toLocaleTimeString("fr-FR"));
+    touchLastUpdate();
   });
 }
 
+function connectRealtime() {
+  METRICS.forEach((m) => connectSensorSocket(m.key));
+}
+
 buildCardsAndCharts();
-loadHistory().catch((err) => console.error("Erreur chargement historique", err));
-connectMqtt().catch((err) => {
-  console.error("Erreur connexion MQTT", err);
-  setStatus("error", "MQTT : indisponible");
-});
+loadHistory();
+connectRealtime();
