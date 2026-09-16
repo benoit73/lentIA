@@ -99,11 +99,17 @@ while True:
     brut_hum = lire_mcp3004(1)  # canal 1 - humidite du sol
     humidite = (brut_hum / 1023) * 100
 
+    brut_lum = lire_mcp3004(2)  # canal 2 - luminosite
+    # Si le capteur est cable en pull-down (tension augmente avec la
+    # lumiere), inverser en (1023 - brut_lum) / 1023 * 100.
+    luminosite = (brut_lum / 1023) * 100
+
     distance = lire_distance_hcsr04()  # TRIG sur GP0, ECHO sur GP1
     niveau_eau = distance_vers_niveau(distance)
 
     print("Brut:", brut, "| Tension:", tension, "V | Temp:", temperature, "C",
           "|| Brut hum:", brut_hum, "| Humidite:", humidite, "%",
+          "|| Brut lum:", brut_lum, "| Luminosite:", luminosite, "%",
           "|| Distance:", distance, "cm | Niveau eau:", niveau_eau, "%")
 
     # Un topic par capteur (lentia/sensors/<capteur>), une valeur JSON par
@@ -113,7 +119,7 @@ while True:
         "temperature": round(temperature, 1),
         "soil_humidity": round(humidite, 1),
         "air_humidity": None,   # pas encore cable
-        "luminosity": None,     # pas encore cable
+        "luminosity": round(luminosite, 1),
         "water_level": round(niveau_eau, 1) if niveau_eau is not None else None,
     }
 
