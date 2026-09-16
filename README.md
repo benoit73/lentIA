@@ -71,18 +71,104 @@ données stockées).
 
 ## API REST
 
-- `GET /api/sensors` — liste des capteurs connus
-- `GET /api/sensors/<capteur>/history?limit=200&start=...&end=...` —
-  historique d'un capteur (plus ancien → plus récent). `limit` (défaut 200,
-  max 2000), `start`/`end` (timestamps ISO 8601, optionnels) bornent la
-  plage.
-- `GET /api/health` — healthcheck
+### `GET /api/health`
+
+Healthcheck.
+
+```bash
+curl http://localhost:5000/api/health
+```
+
+```json
+{ "status": "ok", "time": "2026-09-16T09:05:19.673487+00:00" }
+```
+
+### `GET /api/sensors`
+
+Liste des capteurs connus (les mêmes noms que dans les topics MQTT et les
+colonnes de la table `readings`).
+
+```bash
+curl http://localhost:5000/api/sensors
+```
+
+```json
+["soil_humidity", "air_humidity", "temperature", "luminosity", "water_level"]
+```
+
+### `GET /api/sensors/<capteur>/history`
+
+Historique d'un capteur, du plus ancien au plus récent. Chaque relevé
+`{value, created_at}` correspond à un message MQTT reçu sur
+`lentia/sensors/<capteur>` (voir ci-dessous) ; `value` peut être `null` si le
+capteur avait publié `null` à ce moment-là (pas encore câblé).
+
+Paramètres de requête (tous optionnels) :
+
+| Paramètre | Défaut | Description                                         |
+|-----------|--------|------------------------------------------------------|
+| `limit`   | 200    | Nombre max de relevés (borné à 2000)                  |
+| `start`   | —      | Timestamp ISO 8601, ne renvoie que `created_at >= start` |
+| `end`     | —      | Timestamp ISO 8601, ne renvoie que `created_at <= end`   |
+
+```bash
+curl "http://localhost:5000/api/sensors/temperature/history?limit=3"
+```
+
+```json
+[
+  { "value": 20.7, "created_at": "2026-09-16T09:04:55.895116+00:00" },
+  { "value": 21.0, "created_at": "2026-09-16T09:05:00.891605+00:00" },
+  { "value": 21.0, "created_at": "2026-09-16T09:05:05.892771+00:00" }
+]
+```
+
+Filtrer sur une plage précise :
+
+```bash
+curl "http://localhost:5000/api/sensors/water_level/history?start=2026-09-16T08:00:00Z&end=2026-09-16T09:00:00Z&limit=500"
+```
+
+Erreurs :
+
+```bash
+curl -i http://localhost:5000/api/sensors/poulet/history
+# HTTP/1.1 404 NOT FOUND
+# {"error": "capteur inconnu : poulet"}
+
+curl -i "http://localhost:5000/api/sensors/temperature/history?start=hier"
+# HTTP/1.1 400 BAD REQUEST
+# {"error": "paramètre 'start' invalide, attendu ISO 8601"}
+```
 
 ## WebSocket temps réel
 
-- `ws://<host>:5000/ws/sensors/<capteur>` — pousse chaque nouvelle valeur de
-  ce capteur dès qu'un message MQTT correspondant est reçu (payload : la
-  valeur JSON seule, ex. `21.3` ou `null`).
+`ws://<host>:5000/ws/sensors/<capteur>` pousse chaque nouvelle valeur de ce
+capteur dès que l'API reçoit le message MQTT correspondant. Un message
+WebSocket = une valeur JSON brute (pas d'objet), par exemple `21.3` ou
+`null` — jamais de `created_at` (c'est un flux temps réel, l'historique est
+côté REST). Se connecter sur un capteur inconnu ferme la connexion
+immédiatement.
+
+Exemple JavaScript (c'est ce que fait `dashboard.js`) :
+
+```js
+const socket = new WebSocket("ws://localhost:5000/ws/sensors/temperature");
+socket.addEventListener("message", (event) => {
+  const value = JSON.parse(event.data); // 21.3, ou null
+  console.log("température :", value);
+});
+```
+
+Exemple en ligne de commande avec [`websocat`](https://github.com/vi/websocat) :
+
+```bash
+websocat ws://localhost:5000/ws/sensors/soil_humidity
+# 45.2
+# 44.8
+# 45.0
+# ...
+```
 
 ## Où brancher le vrai matériel
 
