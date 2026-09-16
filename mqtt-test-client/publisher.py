@@ -13,13 +13,13 @@ import json
 import os
 import random
 import time
-from datetime import datetime, timezone
 
 import paho.mqtt.client as mqtt
 
 MQTT_HOST = os.environ.get("MQTT_HOST", "localhost")
 MQTT_PORT = int(os.environ.get("MQTT_PORT", "1883"))
-MQTT_TOPIC = os.environ.get("MQTT_TOPIC", "lentia/sensors/data")
+# Un topic par capteur, ex. lentia/sensors/temperature, lentia/sensors/water_level...
+MQTT_TOPIC_PREFIX = os.environ.get("MQTT_TOPIC_PREFIX", "lentia/sensors")
 INTERVAL = float(os.environ.get("PUBLISH_INTERVAL_SECONDS", "5"))
 
 # Bornes réalistes pour chaque capteur, et un pas de variation max par tick
@@ -44,12 +44,6 @@ def next_value(key: str) -> float:
     return round(value, 1)
 
 
-def build_reading() -> dict:
-    reading = {key: next_value(key) for key in SENSORS}
-    reading["created_at"] = datetime.now(timezone.utc).isoformat()
-    return reading
-
-
 def connect() -> mqtt.Client:
     client = mqtt.Client()
     for attempt in range(15):
@@ -66,12 +60,13 @@ def connect() -> mqtt.Client:
 def main():
     client = connect()
     client.loop_start()
-    print(f"[test-client] publication sur '{MQTT_TOPIC}' toutes les {INTERVAL}s")
+    print(f"[test-client] publication sur '{MQTT_TOPIC_PREFIX}/<capteur>' toutes les {INTERVAL}s")
     try:
         while True:
-            reading = build_reading()
-            client.publish(MQTT_TOPIC, json.dumps(reading))
-            print(f"[test-client] envoyé : {reading}")
+            for key in SENSORS:
+                value = next_value(key)
+                client.publish(f"{MQTT_TOPIC_PREFIX}/{key}", json.dumps(value))
+            print(f"[test-client] envoyé : {state}")
             time.sleep(INTERVAL)
     except KeyboardInterrupt:
         pass

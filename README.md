@@ -14,23 +14,31 @@ Raspberry Pi, capteurs et réseau de neurones).
 
 ## Format des messages MQTT
 
-Topic : `lentia/sensors/data`
+Un topic par capteur, sous le préfixe `lentia/sensors/` :
 
-```json
-{
-  "soil_humidity": 45.2,
-  "air_humidity": 55.8,
-  "temperature": 21.3,
-  "luminosity": 62.0,
-  "water_level": 78.5,
-  "created_at": "2026-09-15T10:00:00+00:00"
-}
+| Topic                          | Capteur                  |
+|---------------------------------|---------------------------|
+| `lentia/sensors/soil_humidity`  | Humidité du sol            |
+| `lentia/sensors/air_humidity`   | Humidité de l'air           |
+| `lentia/sensors/temperature`    | Température                |
+| `lentia/sensors/luminosity`     | Luminosité                 |
+| `lentia/sensors/water_level`    | Niveau du réservoir d'eau  |
+
+Chaque message ne contient que la valeur JSON du capteur (pas d'objet), par
+exemple `21.3` sur `lentia/sensors/temperature`, ou `null` si le capteur
+n'est pas encore câblé :
+
+```
+lentia/sensors/temperature   -> 21.3
+lentia/sensors/soil_humidity -> 45.2
+lentia/sensors/air_humidity  -> null
 ```
 
-`created_at` est optionnel : s'il est absent, l'API et le dashboard utilisent
-l'heure de réception. Ton firmware Pico W (avec le capteur LM35 par exemple)
-n'a qu'à publier ce même JSON sur ce même topic pour remplacer le client de
-test.
+L'API s'abonne au wildcard `lentia/sensors/+` et enregistre une ligne en base
+par message reçu (les autres colonnes restent `NULL` sur cette ligne — un
+message ne porte la valeur que d'un seul capteur). Ton firmware Pico W n'a
+qu'à publier sur ces mêmes topics, avec `null` pour les capteurs pas encore
+câblés, pour remplacer le client de test.
 
 ## Lancer le stack
 
@@ -57,9 +65,10 @@ données stockées).
 ## Où brancher le vrai matériel
 
 Remplace (ou coupe) le service `mqtt-test-client` et fais publier ton Pico W
-directement sur `lentia/sensors/data`, sur `<ip-du-serveur>:1883`, avec le
-même format JSON. Rien d'autre à changer : l'API et le dashboard fonctionnent
-déjà avec n'importe quelle source qui respecte ce format.
+directement sur les topics `lentia/sensors/<capteur>`, sur
+`<ip-du-serveur>:1883`, avec le même format (une valeur JSON par message).
+Rien d'autre à changer : l'API et le dashboard fonctionnent déjà avec
+n'importe quelle source qui respecte ce format.
 
 ## Notes
 

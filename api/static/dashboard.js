@@ -72,6 +72,9 @@ function buildCardsAndCharts() {
   });
 }
 
+// Historique REST : une ligne = un relevé partiel (un seul capteur non-null,
+// les autres colonnes sont NULL). On boucle sur METRICS et on ignore les
+// valeurs absentes, comme avant.
 function updateCards(reading) {
   METRICS.forEach((m) => {
     const el = document.getElementById(`value-${m.key}`);
@@ -100,6 +103,33 @@ function pushPoint(reading) {
   });
 }
 
+// Temps réel MQTT : un message = un seul capteur (topic lentia/sensors/<capteur>,
+// payload = juste la valeur, ou null). On met à jour uniquement ce capteur-là.
+function updateCardField(key, value) {
+  const metric = METRICS.find((m) => m.key === key);
+  const el = document.getElementById(`value-${key}`);
+  if (!metric || !el) return;
+  if (value === null || value === undefined) {
+    el.innerHTML = `--<span class="unit"> ${metric.unit}</span>`;
+  } else {
+    el.innerHTML = `${Number(value).toFixed(1)}<span class="unit"> ${metric.unit}</span>`;
+  }
+  lastUpdateEl.textContent = `Dernière mise à jour : ${new Date().toLocaleString("fr-FR")}`;
+}
+
+function pushChartPoint(key, value) {
+  const chart = charts[key];
+  if (!chart || value === null || value === undefined) return;
+  const label = new Date().toLocaleTimeString("fr-FR");
+  chart.data.labels.push(label);
+  chart.data.datasets[0].data.push(value);
+  if (chart.data.labels.length > MAX_POINTS) {
+    chart.data.labels.shift();
+    chart.data.datasets[0].data.shift();
+  }
+  chart.update("none");
+}
+
 async function loadHistory() {
   const res = await fetch("/api/readings?limit=" + MAX_POINTS);
   const rows = await res.json();
@@ -125,12 +155,13 @@ async function connectMqtt() {
   client.on("close", () => setStatus("error", "MQTT : déconnecté"));
   client.on("error", () => setStatus("error", "MQTT : erreur"));
 
-  client.on("message", (_topic, payload) => {
+  client.on("message", (topic, payload) => {
+    const key = topic.split("/").pop();
+    if (!METRICS.some((m) => m.key === key)) return;
     try {
-      const reading = JSON.parse(payload.toString());
-      if (!reading.created_at) reading.created_at = new Date().toISOString();
-      updateCards(reading);
-      pushPoint(reading);
+      const value = JSON.parse(payload.toString()); // nombre, ou null
+      updateCardField(key, value);
+      pushChartPoint(key, value);
     } catch (err) {
       console.error("Message MQTT invalide", err);
     }

@@ -41,7 +41,7 @@ services:
     environment:
       MQTT_HOST: mosquitto
       MQTT_PORT: 1883
-      MQTT_TOPIC: lentia/sensors/data
+      MQTT_TOPIC_PREFIX: lentia/sensors
       DATABASE_URL: postgresql://lentia:lentia@postgres:5432/lentia
     ports:
       - "5000:5000"   # API REST + dashboard web
@@ -55,7 +55,7 @@ services:
     environment:
       MQTT_HOST: mosquitto
       MQTT_PORT: 1883
-      MQTT_TOPIC: lentia/sensors/data
+      MQTT_TOPIC_PREFIX: lentia/sensors
       PUBLISH_INTERVAL_SECONDS: 5
     restart: unless-stopped
 

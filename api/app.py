@@ -23,7 +23,10 @@ from flask import Flask, jsonify, request, send_from_directory
 
 MQTT_HOST = os.environ.get("MQTT_HOST", "localhost")
 MQTT_PORT = int(os.environ.get("MQTT_PORT", "1883"))
-MQTT_TOPIC = os.environ.get("MQTT_TOPIC", "lentia/sensors/data")
+# Un topic par capteur, ex. lentia/sensors/temperature, lentia/sensors/water_level...
+# On s'abonne au préfixe avec un wildcard pour tous les recevoir.
+MQTT_TOPIC_PREFIX = os.environ.get("MQTT_TOPIC_PREFIX", "lentia/sensors")
+MQTT_SUBSCRIBE_TOPIC = f"{MQTT_TOPIC_PREFIX}/+"
 DATABASE_URL = os.environ.get(
     "DATABASE_URL", "postgresql://lentia:lentia@localhost:5432/lentia"
 )
@@ -58,6 +61,8 @@ def get_conn(retries=10, delay=2):
 
 
 def insert_reading(data: dict):
+    """Insère une ligne, avec NULL pour les champs absents de `data`
+    (un message ne porte la valeur que d'un seul capteur à la fois)."""
     values = [data.get(field) for field in SENSOR_FIELDS]
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -99,22 +104,27 @@ def fetch_readings(limit: int):
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
         print(f"[mqtt] connecté au broker {MQTT_HOST}:{MQTT_PORT}")
-        client.subscribe(MQTT_TOPIC)
-        print(f"[mqtt] abonné au topic '{MQTT_TOPIC}'")
+        client.subscribe(MQTT_SUBSCRIBE_TOPIC)
+        print(f"[mqtt] abonné au topic '{MQTT_SUBSCRIBE_TOPIC}'")
     else:
         print(f"[mqtt] échec de connexion, code {rc}")
 
 
 def on_message(client, userdata, msg):
+    field = msg.topic.rsplit("/", 1)[-1]
+    if field not in SENSOR_FIELDS:
+        print(f"[mqtt] topic inconnu ignoré : {msg.topic}")
+        return
+
     try:
-        payload = json.loads(msg.payload.decode("utf-8"))
+        value = json.loads(msg.payload.decode("utf-8"))
     except (json.JSONDecodeError, UnicodeDecodeError) as err:
         print(f"[mqtt] message ignoré (JSON invalide) : {err}")
         return
 
     try:
-        insert_reading(payload)
-        print(f"[mqtt] relevé enregistré : {payload}")
+        insert_reading({field: value})
+        print(f"[mqtt] relevé enregistré : {field} = {value}")
     except Exception as err:  # on ne veut jamais tuer le thread MQTT
         print(f"[db] échec d'insertion : {err}")
 
@@ -174,7 +184,7 @@ def api_config():
         {
             "mqtt_ws_host": request.host.split(":")[0],
             "mqtt_ws_port": 9001,
-            "mqtt_topic": MQTT_TOPIC,
+            "mqtt_topic": MQTT_SUBSCRIBE_TOPIC,
         }
     )
 
