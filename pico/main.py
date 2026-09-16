@@ -1,4 +1,4 @@
-from machine import Pin, SPI
+from machine import Pin, SPI, time_pulse_us
 import network
 import time
 import ujson
@@ -14,6 +14,11 @@ MQTT_CLIENT_ID = "pico_terrarium"
 MQTT_USER = None                   # None si le broker n'a pas d'authentification
 MQTT_PASSWORD = None
 MQTT_TOPIC_PREFIX = "lentia/sensors"  # un topic par capteur : lentia/sensors/<capteur>
+
+# HC-SR04 (niveau du reservoir) : distance capteur -> eau, en cm, a calibrer
+# sur le reservoir reel.
+RESERVOIR_FULL_CM = 5.0    # distance quand le reservoir est plein (eau haute, distance courte)
+RESERVOIR_EMPTY_CM = 25.0  # distance quand le reservoir est vide (eau basse, distance longue)
 # ========================
 
 
@@ -53,6 +58,36 @@ def lire_mcp3004(canal):
     return valeur
 
 
+trig = Pin(0, Pin.OUT)
+echo = Pin(1, Pin.IN)
+trig.value(0)
+
+
+def lire_distance_hcsr04():
+    """Distance capteur -> obstacle (eau), en cm. None si pas d'echo (hors
+    de portee ou capteur deconnecte)."""
+    trig.value(0)
+    time.sleep_us(2)
+    trig.value(1)
+    time.sleep_us(10)
+    trig.value(0)
+    try:
+        duree_us = time_pulse_us(echo, 1, 30000)  # timeout 30ms (~5m max)
+    except OSError:
+        return None
+    return duree_us / 58  # vitesse du son ~343 m/s, aller-retour
+
+
+def distance_vers_niveau(distance_cm):
+    """Convertit une distance HC-SR04 en % de remplissage du reservoir,
+    borne entre 0 et 100."""
+    if distance_cm is None:
+        return None
+    plage = RESERVOIR_EMPTY_CM - RESERVOIR_FULL_CM
+    niveau = (RESERVOIR_EMPTY_CM - distance_cm) / plage * 100
+    return max(0.0, min(100.0, niveau))
+
+
 connect_wifi()
 mqtt = connect_mqtt()
 
@@ -64,8 +99,12 @@ while True:
     brut_hum = lire_mcp3004(1)  # canal 1 - humidite du sol
     humidite = (brut_hum / 1023) * 100
 
+    distance = lire_distance_hcsr04()  # TRIG sur GP0, ECHO sur GP1
+    niveau_eau = distance_vers_niveau(distance)
+
     print("Brut:", brut, "| Tension:", tension, "V | Temp:", temperature, "C",
-          "|| Brut hum:", brut_hum, "| Humidite:", humidite, "%")
+          "|| Brut hum:", brut_hum, "| Humidite:", humidite, "%",
+          "|| Distance:", distance, "cm | Niveau eau:", niveau_eau, "%")
 
     # Un topic par capteur (lentia/sensors/<capteur>), une valeur JSON par
     # message. None -> "null" pour les capteurs pas encore cables (l'API les
@@ -75,7 +114,7 @@ while True:
         "soil_humidity": round(humidite, 1),
         "air_humidity": None,   # pas encore cable
         "luminosity": None,     # pas encore cable
-        "water_level": None,    # pas encore cable
+        "water_level": round(niveau_eau, 1) if niveau_eau is not None else None,
     }
 
     for capteur, valeur in readings.items():
