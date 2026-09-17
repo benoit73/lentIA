@@ -60,18 +60,6 @@ services:
       - "3000:80"   # Dashboard React (nginx relaie /api et /ws vers l'API)
     restart: unless-stopped
 
-  mqtt-test-client:
-    build: ./mqtt-test-client
-    container_name: lentia-test-client
-    depends_on:
-      - mosquitto
-    environment:
-      MQTT_HOST: mosquitto
-      MQTT_PORT: 1883
-      MQTT_TOPIC_PREFIX: lentia/sensors
-      PUBLISH_INTERVAL_SECONDS: 5
-    restart: unless-stopped
-
 volumes:
   mosquitto-data:
   mosquitto-log:
