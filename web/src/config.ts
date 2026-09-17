@@ -1,5 +1,10 @@
 export const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
+// Au-delà de ce délai sans message MQTT pour un capteur : considéré hors
+// ligne (badge du dashboard) et, côté historique, un trou visible dans la
+// courbe plutôt qu'une ligne continue qui laisserait croire à des données.
+export const SENSOR_STALE_MS = 15_000;
+
 export interface SensorMeta {
   key: string;
   label: string;

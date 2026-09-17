@@ -80,6 +80,22 @@ message ne porte la valeur que d'un seul capteur). Ton firmware Pico W n'a
 qu'à publier sur ces mêmes topics, avec `null` pour les capteurs pas encore
 câblés, pour remplacer le client de test.
 
+### Détection de capteur hors ligne
+
+Le dashboard ne fait confiance qu'aux messages WebSocket réellement reçus :
+`useSensorRealtime` (`web/src/hooks/useSensorRealtime.ts`) retient l'horodatage
+du dernier message par capteur et affiche un badge **Hors ligne** (rouge) dès
+que ce délai dépasse `SENSOR_STALE_MS` (`web/src/config.ts`, 15 secondes par
+défaut) — que la WebSocket elle-même soit coupée ou juste silencieuse (Pico
+éteint, capteur débranché, sans que la connexion à l'API ne tombe). Le badge
+repasse à **En ligne** (vert) dès qu'un nouveau message arrive.
+
+Le même seuil sert à l'historique : `withGapBreaks` (`web/src/chartGaps.ts`)
+insère un point `null` entre deux relevés réels trop espacés dans le temps,
+pour que les courbes (`SensorChart`, mini-graphes des cartes) affichent un
+vrai trou visuel à cet endroit plutôt qu'une ligne continue qui laisserait
+croire à des données qui n'existent pas.
+
 ## Actionneurs (lumière, chauffage, arrosage, ventilation)
 
 Pas de matériel branché pour l'instant, mais le circuit complet existe déjà

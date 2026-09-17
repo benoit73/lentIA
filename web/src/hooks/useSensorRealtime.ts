@@ -1,9 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import { sensorWebSocketUrl } from "../api";
+import { SENSOR_STALE_MS } from "../config";
 
-/** Valeur temps réel d'un capteur, poussée par l'API via WebSocket. */
-export function useSensorRealtime(sensor: string, token: string | null): number | null {
+export interface SensorRealtime {
+  value: number | null;
+  /** false si aucun message reçu depuis SENSOR_STALE_MS (capteur hors ligne
+   * ou WebSocket coupée), même si la connexion WebSocket est restée ouverte. */
+  online: boolean;
+}
+
+/** Valeur temps réel d'un capteur, poussée par l'API via WebSocket, avec un
+ * statut en ligne/hors ligne basé sur la fraîcheur du dernier message. */
+export function useSensorRealtime(sensor: string, token: string | null): SensorRealtime {
   const [value, setValue] = useState<number | null>(null);
+  const [online, setOnline] = useState(false);
+  const lastMessageAt = useRef<number | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
@@ -17,10 +28,13 @@ export function useSensorRealtime(sensor: string, token: string | null): number 
       socketRef.current = socket;
 
       socket.addEventListener("message", (event) => {
+        lastMessageAt.current = Date.now();
         setValue(JSON.parse(event.data));
+        setOnline(true);
       });
 
       socket.addEventListener("close", () => {
+        setOnline(false);
         if (!cancelled) retryTimer = setTimeout(connect, 3000);
       });
     }
@@ -34,5 +48,17 @@ export function useSensorRealtime(sensor: string, token: string | null): number 
     };
   }, [sensor, token]);
 
-  return value;
+  // Le Pico peut s'arrêter d'envoyer sans que la WebSocket (vers notre API)
+  // ne se ferme elle-même : on vérifie donc aussi périodiquement l'âge du
+  // dernier message reçu pour détecter un capteur silencieux.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (lastMessageAt.current !== null && Date.now() - lastMessageAt.current > SENSOR_STALE_MS) {
+        setOnline(false);
+      }
+    }, 2000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return { value, online };
 }

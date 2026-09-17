@@ -2,9 +2,11 @@ import { Link } from "react-router-dom";
 import { Area, AreaChart, ResponsiveContainer } from "recharts";
 import type { HistoryRange } from "../api";
 import { useAuth } from "../auth/AuthContext";
+import { withGapBreaks } from "../chartGaps";
 import type { SensorMeta } from "../config";
 import { useSensorHistory } from "../hooks/useSensorHistory";
 import { useSensorRealtime } from "../hooks/useSensorRealtime";
+import { LiveStatusDot } from "./LiveStatusDot";
 
 function formatValue(value: number | null, unit: string) {
   if (value === null || value === undefined) return "--";
@@ -14,12 +16,12 @@ function formatValue(value: number | null, unit: string) {
 
 export function SensorCard({ sensor, range }: { sensor: SensorMeta; range: HistoryRange }) {
   const { token } = useAuth();
-  const live = useSensorRealtime(sensor.key, token);
+  const { value: live, online } = useSensorRealtime(sensor.key, token);
   const { data } = useSensorHistory(sensor.key, range);
 
   const latestHistoryValue = [...data].reverse().find((d) => d.value !== null)?.value ?? null;
   const currentValue = live ?? latestHistoryValue;
-  const chartData = data.filter((d) => d.value !== null).map((d) => ({ value: d.value }));
+  const chartData = withGapBreaks(data).map((d) => ({ value: d.value }));
 
   return (
     <Link
@@ -31,9 +33,12 @@ export function SensorCard({ sensor, range }: { sensor: SensorMeta; range: Histo
           <h2 className="font-bold text-lg text-theme-textPrimary tracking-tight">{sensor.label}</h2>
           <p className="text-xs text-theme-textSecondary mt-0.5 font-medium">Voir l'historique →</p>
         </div>
-        <span className="text-2xl font-extrabold text-theme-textPrimary tracking-tight whitespace-nowrap">
-          {formatValue(currentValue, sensor.unit)}
-        </span>
+        <div className="flex flex-col items-end gap-1">
+          <span className="text-2xl font-extrabold text-theme-textPrimary tracking-tight whitespace-nowrap">
+            {formatValue(currentValue, sensor.unit)}
+          </span>
+          <LiveStatusDot online={online} />
+        </div>
       </div>
       <div className="h-16 mt-4">
         <ResponsiveContainer width="100%" height="100%">
@@ -52,6 +57,7 @@ export function SensorCard({ sensor, range }: { sensor: SensorMeta; range: Histo
               fill={`url(#grad-${sensor.key})`}
               dot={false}
               isAnimationActive={false}
+              connectNulls={false}
             />
           </AreaChart>
         </ResponsiveContainer>

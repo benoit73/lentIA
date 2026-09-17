@@ -1,8 +1,9 @@
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { HistoryPoint } from "../api";
+import { withGapBreaks } from "../chartGaps";
 
 interface ChartPoint {
-  value: number;
+  value: number | null;
   created_at: string;
   label: string;
 }
@@ -17,11 +18,14 @@ function formatTick(iso: string) {
 }
 
 export function SensorChart({ data, color, unit }: { data: HistoryPoint[]; color: string; unit: string }) {
-  const points: ChartPoint[] = data
-    .filter((d): d is { value: number; created_at: string } => d.value !== null)
-    .map((d) => ({ value: d.value, created_at: d.created_at, label: formatTick(d.created_at) }));
+  const points: ChartPoint[] = withGapBreaks(data).map((d) => ({
+    ...d,
+    label: formatTick(d.created_at),
+  }));
 
-  if (points.length === 0) {
+  const hasData = points.some((p) => p.value !== null);
+
+  if (!hasData) {
     return (
       <div className="h-72 flex items-center justify-center text-sm text-theme-textSecondary">
         Aucune donnée sur cette plage.
@@ -37,13 +41,23 @@ export function SensorChart({ data, color, unit }: { data: HistoryPoint[]; color
           <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#8B90A5" }} minTickGap={40} />
           <YAxis tick={{ fontSize: 11, fill: "#8B90A5" }} width={48} />
           <Tooltip
-            formatter={(value: number) => [`${value} ${unit}`, "Valeur"]}
+            formatter={(value: number | string | Array<number | string>) =>
+              value === null || value === undefined ? ["—", "Valeur"] : [`${value} ${unit}`, "Valeur"]
+            }
             labelFormatter={(_label, payload) => {
               const point = payload?.[0]?.payload as ChartPoint | undefined;
               return point ? new Date(point.created_at).toLocaleString("fr-FR") : "";
             }}
           />
-          <Line type="monotone" dataKey="value" stroke={color} strokeWidth={3} dot={false} isAnimationActive={false} />
+          <Line
+            type="monotone"
+            dataKey="value"
+            stroke={color}
+            strokeWidth={3}
+            dot={false}
+            isAnimationActive={false}
+            connectNulls={false}
+          />
         </LineChart>
       </ResponsiveContainer>
     </div>

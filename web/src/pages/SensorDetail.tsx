@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import { LiveStatusDot } from "../components/LiveStatusDot";
 import { SensorChart } from "../components/SensorChart";
 import { PresetKey, presetToRange, RangePicker } from "../components/RangePicker";
 import { TopBar } from "../components/TopBar";
@@ -19,7 +20,7 @@ export function SensorDetail() {
   const { token } = useAuth();
   const range = useMemo(() => presetToRange(preset, customStart, customEnd), [preset, customStart, customEnd]);
   const { data, loading, error } = useSensorHistory(sensorKey ?? "", range);
-  const live = useSensorRealtime(sensorKey ?? "", token);
+  const { value: live, online } = useSensorRealtime(sensorKey ?? "", token);
 
   if (!sensor) {
     return (
@@ -45,11 +46,14 @@ export function SensorDetail() {
               ← Retour au dashboard
             </Link>
             <h1 className="font-bold text-2xl text-theme-textPrimary tracking-tight mt-1">{sensor.label}</h1>
-            <p className="text-sm text-theme-textSecondary mt-0.5">
-              Valeur actuelle :{" "}
-              <strong className="text-theme-textPrimary">
-                {live !== null ? `${live} ${sensor.unit}` : "—"}
-              </strong>
+            <p className="text-sm text-theme-textSecondary mt-0.5 flex items-center gap-2 flex-wrap">
+              <span>
+                Valeur actuelle :{" "}
+                <strong className="text-theme-textPrimary">
+                  {live !== null ? `${live} ${sensor.unit}` : "—"}
+                </strong>
+              </span>
+              <LiveStatusDot online={online} />
             </p>
           </div>
           <RangePicker
