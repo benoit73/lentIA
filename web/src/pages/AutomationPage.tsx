@@ -6,69 +6,101 @@ import {
   type AutomationRule,
   type ScheduleConfig,
   type ThresholdConfig,
+  type TimeRange,
 } from "../api";
 import { useAuth } from "../auth/AuthContext";
+import { FlexibleActuatorCard, type FlexibleForm } from "../components/automation/FlexibleActuatorCard";
+import { ScheduleRangesEditor } from "../components/automation/ScheduleRangesEditor";
 import { ToggleSwitch } from "../components/ToggleSwitch";
 import { TopBar } from "../components/TopBar";
 
-interface ScheduleForm {
+interface ScheduleOnlyForm {
   enabled: boolean;
-  start: string;
-  end: string;
+  ranges: TimeRange[];
 }
 
-interface ThresholdForm {
-  enabled: boolean;
-  sensor: string;
-  comparator: "above" | "below";
-  threshold: string; // texte pour l'input, converti au moment d'enregistrer
-  windowMinutes: string;
-}
-
-const DEFAULT_LIGHT: ScheduleForm = { enabled: false, start: "06:00", end: "22:00" };
-const DEFAULT_WATERING: ThresholdForm = {
+const DEFAULT_LIGHT: ScheduleOnlyForm = {
   enabled: false,
-  sensor: "soil_humidity",
-  comparator: "below",
-  threshold: "35",
-  windowMinutes: "60",
-};
-const DEFAULT_VENTILATION: ThresholdForm = {
-  enabled: false,
-  sensor: "temperature",
-  comparator: "above",
-  threshold: "28",
-  windowMinutes: "15",
+  ranges: [{ start: "06:00", end: "22:00" }],
 };
 
-function toScheduleForm(rule: AutomationRule | undefined, fallback: ScheduleForm): ScheduleForm {
+const DEFAULT_WATERING: FlexibleForm = {
+  enabled: false,
+  ruleType: "threshold",
+  ranges: [{ start: "07:00", end: "07:05" }],
+  threshold: {
+    sensor: "soil_humidity",
+    comparator: "below",
+    threshold: "35",
+    actionMode: "duration",
+    durationMinutes: "5",
+    targetValue: "55",
+  },
+};
+
+const DEFAULT_VENTILATION: FlexibleForm = {
+  enabled: false,
+  ruleType: "threshold",
+  ranges: [{ start: "12:00", end: "14:00" }],
+  threshold: {
+    sensor: "temperature",
+    comparator: "above",
+    threshold: "28",
+    actionMode: "duration",
+    durationMinutes: "10",
+    targetValue: "24",
+  },
+};
+
+const DEFAULT_HEATING: FlexibleForm = {
+  enabled: false,
+  ruleType: "threshold",
+  ranges: [{ start: "20:00", end: "06:00" }],
+  threshold: {
+    sensor: "temperature",
+    comparator: "below",
+    threshold: "18",
+    actionMode: "duration",
+    durationMinutes: "15",
+    targetValue: "21",
+  },
+};
+
+function toScheduleOnlyForm(rule: AutomationRule | undefined, fallback: ScheduleOnlyForm): ScheduleOnlyForm {
   if (!rule || rule.rule_type !== "schedule") return fallback;
   const config = rule.config as ScheduleConfig;
-  return { enabled: rule.enabled, start: config.start, end: config.end };
+  return { enabled: rule.enabled, ranges: config.ranges };
 }
 
-function toThresholdForm(rule: AutomationRule | undefined, fallback: ThresholdForm): ThresholdForm {
-  if (!rule || rule.rule_type !== "threshold") return fallback;
+function toFlexibleForm(rule: AutomationRule | undefined, fallback: FlexibleForm): FlexibleForm {
+  if (!rule) return fallback;
+  if (rule.rule_type === "schedule") {
+    const config = rule.config as ScheduleConfig;
+    return { ...fallback, enabled: rule.enabled, ruleType: "schedule", ranges: config.ranges };
+  }
   const config = rule.config as ThresholdConfig;
   return {
+    ...fallback,
     enabled: rule.enabled,
-    sensor: config.sensor,
-    comparator: config.comparator,
-    threshold: String(config.threshold),
-    windowMinutes: String(config.window_minutes),
+    ruleType: "threshold",
+    threshold: {
+      sensor: config.sensor,
+      comparator: config.comparator,
+      threshold: String(config.threshold),
+      actionMode: config.action_mode,
+      durationMinutes: config.duration_minutes !== undefined ? String(config.duration_minutes) : fallback.threshold.durationMinutes,
+      targetValue: config.target_value !== undefined ? String(config.target_value) : fallback.threshold.targetValue,
+    },
   };
-}
-
-function inputClass() {
-  return "rounded-xl border border-slate-200 px-2 py-1.5 bg-white text-theme-textPrimary text-sm";
 }
 
 export function AutomationPage() {
   const { token, signOut } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [lightForm, setLightForm] = useState<ScheduleForm>(DEFAULT_LIGHT);
-  const [wateringForm, setWateringForm] = useState<ThresholdForm>(DEFAULT_WATERING);
-  const [ventilationForm, setVentilationForm] = useState<ThresholdForm>(DEFAULT_VENTILATION);
+  const [lightForm, setLightForm] = useState<ScheduleOnlyForm>(DEFAULT_LIGHT);
+  const [wateringForm, setWateringForm] = useState<FlexibleForm>(DEFAULT_WATERING);
+  const [ventilationForm, setVentilationForm] = useState<FlexibleForm>(DEFAULT_VENTILATION);
+  const [heatingForm, setHeatingForm] = useState<FlexibleForm>(DEFAULT_HEATING);
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [messages, setMessages] = useState<Record<string, string>>({});
 
@@ -76,9 +108,10 @@ export function AutomationPage() {
     if (!token) return;
     fetchAutomationRules(token)
       .then((rules) => {
-        setLightForm(toScheduleForm(rules.light, DEFAULT_LIGHT));
-        setWateringForm(toThresholdForm(rules.watering, DEFAULT_WATERING));
-        setVentilationForm(toThresholdForm(rules.ventilation, DEFAULT_VENTILATION));
+        setLightForm(toScheduleOnlyForm(rules.light, DEFAULT_LIGHT));
+        setWateringForm(toFlexibleForm(rules.watering, DEFAULT_WATERING));
+        setVentilationForm(toFlexibleForm(rules.ventilation, DEFAULT_VENTILATION));
+        setHeatingForm(toFlexibleForm(rules.heating, DEFAULT_HEATING));
       })
       .catch((err) => {
         if (err instanceof ApiError && err.status === 401) signOut();
@@ -86,43 +119,78 @@ export function AutomationPage() {
       .finally(() => setLoading(false));
   }, [token, signOut]);
 
-  async function saveSchedule(actuator: string, form: ScheduleForm) {
+  async function saveLight() {
     if (!token) return;
-    setSavingKey(actuator);
-    setMessages((m) => ({ ...m, [actuator]: "" }));
+    setSavingKey("light");
+    setMessages((m) => ({ ...m, light: "" }));
     try {
-      await saveAutomationRule(token, actuator, {
-        enabled: form.enabled,
+      await saveAutomationRule(token, "light", {
+        enabled: lightForm.enabled,
         rule_type: "schedule",
-        config: { start: form.start, end: form.end },
+        config: { ranges: lightForm.ranges },
       });
-      setMessages((m) => ({ ...m, [actuator]: "Enregistré." }));
-    } catch {
-      setMessages((m) => ({ ...m, [actuator]: "Échec de l'enregistrement." }));
+      setMessages((m) => ({ ...m, light: "Enregistré." }));
+    } catch (err) {
+      setMessages((m) => ({
+        ...m,
+        light: err instanceof ApiError ? err.message : "Échec de l'enregistrement.",
+      }));
     } finally {
       setSavingKey(null);
     }
   }
 
-  async function saveThreshold(actuator: string, form: ThresholdForm) {
+  async function saveFlexible(actuator: string, form: FlexibleForm) {
     if (!token) return;
-    const threshold = Number(form.threshold);
-    const windowMinutes = Number(form.windowMinutes);
-    if (!Number.isFinite(threshold) || !Number.isFinite(windowMinutes) || windowMinutes <= 0) {
-      setMessages((m) => ({ ...m, [actuator]: "Seuil ou fenêtre invalide." }));
-      return;
+
+    let config: ScheduleConfig | ThresholdConfig;
+    if (form.ruleType === "schedule") {
+      config = { ranges: form.ranges };
+    } else {
+      const threshold = Number(form.threshold.threshold);
+      if (!Number.isFinite(threshold)) {
+        setMessages((m) => ({ ...m, [actuator]: "Seuil invalide." }));
+        return;
+      }
+      if (form.threshold.actionMode === "duration") {
+        const durationMinutes = Number(form.threshold.durationMinutes);
+        if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) {
+          setMessages((m) => ({ ...m, [actuator]: "Durée invalide." }));
+          return;
+        }
+        config = {
+          sensor: form.threshold.sensor,
+          comparator: form.threshold.comparator,
+          threshold,
+          action_mode: "duration",
+          duration_minutes: durationMinutes,
+        };
+      } else {
+        const targetValue = Number(form.threshold.targetValue);
+        if (!Number.isFinite(targetValue)) {
+          setMessages((m) => ({ ...m, [actuator]: "Valeur cible invalide." }));
+          return;
+        }
+        config = {
+          sensor: form.threshold.sensor,
+          comparator: form.threshold.comparator,
+          threshold,
+          action_mode: "until_target",
+          target_value: targetValue,
+        };
+      }
     }
+
     setSavingKey(actuator);
     setMessages((m) => ({ ...m, [actuator]: "" }));
     try {
-      await saveAutomationRule(token, actuator, {
-        enabled: form.enabled,
-        rule_type: "threshold",
-        config: { sensor: form.sensor, comparator: form.comparator, threshold, window_minutes: windowMinutes },
-      });
+      await saveAutomationRule(token, actuator, { enabled: form.enabled, rule_type: form.ruleType, config });
       setMessages((m) => ({ ...m, [actuator]: "Enregistré." }));
-    } catch {
-      setMessages((m) => ({ ...m, [actuator]: "Échec de l'enregistrement." }));
+    } catch (err) {
+      setMessages((m) => ({
+        ...m,
+        [actuator]: err instanceof ApiError ? err.message : "Échec de l'enregistrement.",
+      }));
     } finally {
       setSavingKey(null);
     }
@@ -145,13 +213,15 @@ export function AutomationPage() {
       {loading ? (
         <p className="mt-5 text-sm text-theme-textSecondary">Chargement…</p>
       ) : (
-        <div className="mt-4 grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-5">
-          {/* Lumière : plage horaire */}
+        <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-5">
+          {/* Lumière : plage(s) horaire(s) uniquement */}
           <div className="bg-theme-card rounded-3xl p-5 shadow-soft-card flex flex-col">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h3 className="font-bold text-base text-theme-textPrimary">Lumière</h3>
-                <p className="text-xs text-theme-textSecondary mt-0.5">Allumer sur une plage horaire fixe</p>
+                <p className="text-xs text-theme-textSecondary mt-0.5">
+                  Allumer sur une ou plusieurs plages horaires (non chevauchantes)
+                </p>
               </div>
               <ToggleSwitch
                 checked={lightForm.enabled}
@@ -160,33 +230,13 @@ export function AutomationPage() {
               />
             </div>
 
-            <div className="mt-4 flex items-end gap-2">
-              <label className="flex flex-col gap-1 text-xs font-semibold text-theme-textSecondary">
-                Début
-                <input
-                  type="time"
-                  value={lightForm.start}
-                  onChange={(e) => setLightForm((f) => ({ ...f, start: e.target.value }))}
-                  className={inputClass()}
-                />
-              </label>
-              <span className="pb-2 text-theme-textSecondary">→</span>
-              <label className="flex flex-col gap-1 text-xs font-semibold text-theme-textSecondary">
-                Fin
-                <input
-                  type="time"
-                  value={lightForm.end}
-                  onChange={(e) => setLightForm((f) => ({ ...f, end: e.target.value }))}
-                  className={inputClass()}
-                />
-              </label>
-            </div>
+            <ScheduleRangesEditor ranges={lightForm.ranges} onChange={(ranges) => setLightForm((f) => ({ ...f, ranges }))} />
 
             <div className="mt-4 flex items-center gap-3">
               <button
                 type="button"
                 disabled={savingKey === "light"}
-                onClick={() => saveSchedule("light", lightForm)}
+                onClick={saveLight}
                 className="px-4 py-2 rounded-xl bg-theme-accent text-white text-xs font-bold disabled:opacity-50"
               >
                 Enregistrer
@@ -195,119 +245,44 @@ export function AutomationPage() {
             </div>
           </div>
 
-          {/* Arrosage : humidité du sol moyenne */}
-          <div className="bg-theme-card rounded-3xl p-5 shadow-soft-card flex flex-col">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h3 className="font-bold text-base text-theme-textPrimary">Arrosage</h3>
-                <p className="text-xs text-theme-textSecondary mt-0.5">
-                  Arroser si l'humidité du sol moyenne passe sous le seuil
-                </p>
-              </div>
-              <ToggleSwitch
-                checked={wateringForm.enabled}
-                onChange={(next) => setWateringForm((f) => ({ ...f, enabled: next }))}
-                label="Automatisation arrosage"
-              />
-            </div>
+          <FlexibleActuatorCard
+            title="Arrosage"
+            description="Seuil sur l'humidité du sol, ou plage(s) horaire(s)"
+            form={wateringForm}
+            onChange={setWateringForm}
+            onSave={() => saveFlexible("watering", wateringForm)}
+            saving={savingKey === "watering"}
+            message={messages.watering}
+            sensorOptions={[{ value: "soil_humidity", label: "Humidité du sol" }]}
+            unit="%"
+          />
 
-            <div className="mt-4 grid grid-cols-2 gap-2">
-              <label className="flex flex-col gap-1 text-xs font-semibold text-theme-textSecondary">
-                Seuil (%)
-                <input
-                  type="number"
-                  value={wateringForm.threshold}
-                  onChange={(e) => setWateringForm((f) => ({ ...f, threshold: e.target.value }))}
-                  className={inputClass()}
-                />
-              </label>
-              <label className="flex flex-col gap-1 text-xs font-semibold text-theme-textSecondary">
-                Fenêtre (min)
-                <input
-                  type="number"
-                  value={wateringForm.windowMinutes}
-                  onChange={(e) => setWateringForm((f) => ({ ...f, windowMinutes: e.target.value }))}
-                  className={inputClass()}
-                />
-              </label>
-            </div>
+          <FlexibleActuatorCard
+            title="Ventilation"
+            description="Seuil sur la température ou l'humidité de l'air, ou plage(s) horaire(s)"
+            form={ventilationForm}
+            onChange={setVentilationForm}
+            onSave={() => saveFlexible("ventilation", ventilationForm)}
+            saving={savingKey === "ventilation"}
+            message={messages.ventilation}
+            sensorOptions={[
+              { value: "temperature", label: "Température" },
+              { value: "air_humidity", label: "Humidité de l'air" },
+            ]}
+            unit={ventilationForm.threshold.sensor === "temperature" ? "°C" : "%"}
+          />
 
-            <div className="mt-4 flex items-center gap-3">
-              <button
-                type="button"
-                disabled={savingKey === "watering"}
-                onClick={() => saveThreshold("watering", wateringForm)}
-                className="px-4 py-2 rounded-xl bg-theme-accent text-white text-xs font-bold disabled:opacity-50"
-              >
-                Enregistrer
-              </button>
-              {messages.watering && <span className="text-xs text-theme-textSecondary">{messages.watering}</span>}
-            </div>
-          </div>
-
-          {/* Ventilation : temperature ou humidite de l'air, au choix */}
-          <div className="bg-theme-card rounded-3xl p-5 shadow-soft-card flex flex-col">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h3 className="font-bold text-base text-theme-textPrimary">Ventilation</h3>
-                <p className="text-xs text-theme-textSecondary mt-0.5">
-                  Ventiler si la moyenne choisie dépasse le seuil
-                </p>
-              </div>
-              <ToggleSwitch
-                checked={ventilationForm.enabled}
-                onChange={(next) => setVentilationForm((f) => ({ ...f, enabled: next }))}
-                label="Automatisation ventilation"
-              />
-            </div>
-
-            <label className="mt-4 flex flex-col gap-1 text-xs font-semibold text-theme-textSecondary">
-              Capteur
-              <select
-                value={ventilationForm.sensor}
-                onChange={(e) => setVentilationForm((f) => ({ ...f, sensor: e.target.value }))}
-                className={inputClass()}
-              >
-                <option value="temperature">Température</option>
-                <option value="air_humidity">Humidité de l'air</option>
-              </select>
-            </label>
-
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <label className="flex flex-col gap-1 text-xs font-semibold text-theme-textSecondary">
-                Seuil {ventilationForm.sensor === "temperature" ? "(°C)" : "(%)"}
-                <input
-                  type="number"
-                  value={ventilationForm.threshold}
-                  onChange={(e) => setVentilationForm((f) => ({ ...f, threshold: e.target.value }))}
-                  className={inputClass()}
-                />
-              </label>
-              <label className="flex flex-col gap-1 text-xs font-semibold text-theme-textSecondary">
-                Fenêtre (min)
-                <input
-                  type="number"
-                  value={ventilationForm.windowMinutes}
-                  onChange={(e) => setVentilationForm((f) => ({ ...f, windowMinutes: e.target.value }))}
-                  className={inputClass()}
-                />
-              </label>
-            </div>
-
-            <div className="mt-4 flex items-center gap-3">
-              <button
-                type="button"
-                disabled={savingKey === "ventilation"}
-                onClick={() => saveThreshold("ventilation", ventilationForm)}
-                className="px-4 py-2 rounded-xl bg-theme-accent text-white text-xs font-bold disabled:opacity-50"
-              >
-                Enregistrer
-              </button>
-              {messages.ventilation && (
-                <span className="text-xs text-theme-textSecondary">{messages.ventilation}</span>
-              )}
-            </div>
-          </div>
+          <FlexibleActuatorCard
+            title="Chauffage"
+            description="Seuil sur la température, ou plage(s) horaire(s)"
+            form={heatingForm}
+            onChange={setHeatingForm}
+            onSave={() => saveFlexible("heating", heatingForm)}
+            saving={savingKey === "heating"}
+            message={messages.heating}
+            sensorOptions={[{ value: "temperature", label: "Température" }]}
+            unit="°C"
+          />
         </div>
       )}
     </div>

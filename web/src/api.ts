@@ -27,7 +27,12 @@ async function authedFetch(token: string, path: string, init: RequestInit = {}):
     throw new ApiError(res.status, "Session expirée ou accès refusé");
   }
   if (!res.ok) {
-    throw new ApiError(res.status, "Erreur API");
+    const message = await res
+      .clone()
+      .json()
+      .then((body) => (typeof body?.error === "string" ? body.error : undefined))
+      .catch(() => undefined);
+    throw new ApiError(res.status, message ?? "Erreur API");
   }
   return res;
 }
@@ -107,17 +112,24 @@ export async function toggleActuator(token: string, actuator: string, on: boolea
 }
 
 export type RuleType = "schedule" | "threshold";
+export type ActionMode = "duration" | "until_target";
 
-export interface ScheduleConfig {
+export interface TimeRange {
   start: string; // "HH:MM"
   end: string; // "HH:MM"
+}
+
+export interface ScheduleConfig {
+  ranges: TimeRange[]; // non chevauchantes (validé côté serveur)
 }
 
 export interface ThresholdConfig {
   sensor: string;
   comparator: "above" | "below";
   threshold: number;
-  window_minutes: number;
+  action_mode: ActionMode;
+  duration_minutes?: number; // si action_mode === "duration"
+  target_value?: number; // si action_mode === "until_target"
 }
 
 export interface AutomationRule {

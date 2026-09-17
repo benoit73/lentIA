@@ -35,6 +35,10 @@ ACTUATOR_FIELDS = [
 # Intervalle (secondes) entre deux évaluations des règles d'automatisation.
 AUTOMATION_POLL_SECONDS = int(os.environ.get("AUTOMATION_POLL_SECONDS", "30"))
 
+# Fenêtre (minutes) de la moyenne utilisée par les règles à seuil — fixe,
+# plus configurable par règle (simplifie l'UI : une seule fenêtre pour tous).
+AUTOMATION_AVERAGE_WINDOW_MINUTES = int(os.environ.get("AUTOMATION_AVERAGE_WINDOW_MINUTES", "10"))
+
 # Authentification (Google Sign-In / OpenID Connect) pour le dashboard React.
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 # Liste blanche d'emails autorisés à se connecter (vide = n'importe quel

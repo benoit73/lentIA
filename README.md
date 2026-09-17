@@ -42,7 +42,7 @@ Raspberry Pi, capteurs et réseau de neurones).
 | `src/pages/Dashboard.tsx`       | Page d'accueil : grille des 5 capteurs + sélecteur de plage      |
 | `src/pages/ControlPage.tsx`     | Page « Contrôle » : actionneurs, aperçu du journal, retour caméra |
 | `src/pages/JournalPage.tsx`     | Journal complet : filtre par actionneur + plage, durée de chaque état |
-| `src/pages/AutomationPage.tsx`  | Configuration des règles : plage horaire (lumière), seuils (arrosage, ventilation) |
+| `src/pages/AutomationPage.tsx`  | Configuration des règles (plage horaire multi-plages ou seuil) pour lumière, arrosage, ventilation, chauffage |
 | `src/pages/SensorDetail.tsx`    | Détail d'un capteur : graphe + sélecteur de plage d'historique   |
 | `src/components/PageCylinder.tsx` | Carrousel 3D (glisser souris/tactile + flèches + clavier)     |
 | `src/components/ActuatorPanel.tsx` | Tableau lumière/chauffage/arrosage/ventilation (juste les interrupteurs) |
@@ -158,16 +158,27 @@ déclenche en tâche de fond).
 La page **Automatisation** du dashboard configure des règles évaluées côté
 serveur (`api/automation.py`, toutes les `AUTOMATION_POLL_SECONDS` — 30s par
 défaut) qui déclenchent les mêmes commandes qu'un interrupteur manuel, mais
-avec `source: "auto"` dans le journal. Deux types de règles :
+avec `source: "auto"` dans le journal. Les 4 actionneurs (lumière, arrosage,
+ventilation, chauffage) supportent chacun deux types de règles, au choix :
 
-- **Plage horaire** (`schedule`) — utilisée pour la lumière : activé entre
-  une heure de début et de fin (ex. 07:00–21:00), désactivé en dehors.
-- **Seuil sur une moyenne** (`threshold`) — utilisée pour l'arrosage
-  (humidité du sol moyenne sur une fenêtre configurable, ex. en dessous de
-  35% sur 60 min → arroser) et la ventilation (température **ou** humidité
-  de l'air moyenne, au choix, ex. au-dessus de 28°C sur 15 min → ventiler).
-  La moyenne est calculée sur les relevés Postgres (`db.fetch_sensor_average`),
-  pas seulement sur ce qui est actuellement en mémoire.
+- **Plage(s) horaire(s)** (`schedule`) — une ou plusieurs plages
+  début/fin (ex. 07:00–21:00) ; l'actionneur est activé quand l'heure
+  courante tombe dans au moins une plage. On peut ajouter plusieurs plages
+  (ex. matin + soir), mais elles ne doivent **pas se chevaucher** — validé
+  côté serveur (`PUT` renvoie une erreur 400 sinon), y compris pour les
+  plages qui passent minuit (ex. 22:00–02:00).
+- **Seuil sur une moyenne** (`threshold`) — déclenche selon un capteur
+  (ex. humidité du sol pour l'arrosage, température **ou** humidité de
+  l'air pour la ventilation/chauffage), comparé à un seuil (`above`/`below`).
+  La moyenne est **toujours calculée sur les 10 dernières minutes**
+  (`AUTOMATION_AVERAGE_WINDOW_MINUTES`, fixe — plus de fenêtre configurable
+  par règle) via `db.fetch_sensor_average`. Une fois le seuil franchi,
+  deux façons de piloter l'arrêt :
+  - **Pendant une durée** (`action_mode: "duration"`) — reste activé
+    `duration_minutes` minutes puis s'arrête, indépendamment du capteur.
+  - **Jusqu'à une valeur** (`action_mode: "until_target"`) — reste activé
+    jusqu'à ce que la moyenne atteigne `target_value` (ex. arroser jusqu'à
+    55% d'humidité du sol, chauffer jusqu'à 21°C).
 
 Chaque actionneur n'a qu'une seule règle active à la fois (activer/désactiver
 + reconfigurer remplace la précédente). Une règle désactivée (`enabled:
@@ -182,9 +193,20 @@ false`) est ignorée par le moteur d'automatisation.
 actionneur) suivent le même schéma d'authentification que le reste de l'API :
 
 ```bash
+# Plage horaire (plusieurs plages, non chevauchantes)
 curl -X PUT -H "Authorization: Bearer $ID_TOKEN" -H "Content-Type: application/json" \
-  -d '{"enabled": true, "rule_type": "threshold", "config": {"sensor": "soil_humidity", "comparator": "below", "threshold": 35, "window_minutes": 60}}' \
+  -d '{"enabled": true, "rule_type": "schedule", "config": {"ranges": [{"start": "07:00", "end": "09:00"}, {"start": "18:00", "end": "20:00"}]}}' \
+  http://localhost:5000/api/automation/rules/light
+
+# Seuil, arrêt après une durée fixe
+curl -X PUT -H "Authorization: Bearer $ID_TOKEN" -H "Content-Type: application/json" \
+  -d '{"enabled": true, "rule_type": "threshold", "config": {"sensor": "soil_humidity", "comparator": "below", "threshold": 35, "action_mode": "duration", "duration_minutes": 5}}' \
   http://localhost:5000/api/automation/rules/watering
+
+# Seuil, arrêt quand le capteur atteint une valeur cible
+curl -X PUT -H "Authorization: Bearer $ID_TOKEN" -H "Content-Type: application/json" \
+  -d '{"enabled": true, "rule_type": "threshold", "config": {"sensor": "temperature", "comparator": "below", "threshold": 18, "action_mode": "until_target", "target_value": 21}}' \
+  http://localhost:5000/api/automation/rules/heating
 ```
 
 ## Authentification (OAuth)
@@ -526,3 +548,6 @@ montage), rien d'autre à changer côté logiciel — le Pico écoute déjà
 - `AUTOMATION_POLL_SECONDS` (défaut 30) règle la fréquence d'évaluation des
   règles d'automatisation — une valeur plus basse réagit plus vite mais
   interroge Postgres plus souvent.
+- `AUTOMATION_AVERAGE_WINDOW_MINUTES` (défaut 10) règle la fenêtre de moyenne
+  utilisée par les règles à seuil — fixe pour toutes les règles, pas
+  configurable individuellement.

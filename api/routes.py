@@ -107,27 +107,79 @@ def toggle_actuator(actuator):
     return jsonify({"actuator": actuator, "on": state})
 
 
+def _is_number(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _hhmm_to_minutes(value):
+    hours, minutes = value.split(":")
+    return int(hours) * 60 + int(minutes)
+
+
+def _range_to_intervals(range_config):
+    """Une plage HH:MM -> une ou deux plages en minutes-depuis-minuit (deux
+    si elle traverse minuit, ex. 22:00-06:00)."""
+    start = _hhmm_to_minutes(range_config["start"])
+    end = _hhmm_to_minutes(range_config["end"])
+    if start < end:
+        return [(start, end)]
+    return [(start, 24 * 60), (0, end)]
+
+
+def _intervals_overlap(a, b):
+    return a[0] < b[1] and b[0] < a[1]
+
+
+def _validate_schedule_ranges(ranges):
+    if not isinstance(ranges, list) or len(ranges) == 0:
+        return jsonify({"error": "config.ranges doit être une liste non vide de {start, end}"}), 400
+
+    all_intervals = []
+    for i, range_config in enumerate(ranges):
+        if not isinstance(range_config, dict):
+            return jsonify({"error": f"config.ranges[{i}] doit être un objet {{start, end}}"}), 400
+        for field in ("start", "end"):
+            value = range_config.get(field)
+            if not isinstance(value, str) or not _HHMM_RE.match(value):
+                return jsonify({"error": f"config.ranges[{i}].{field} doit être au format HH:MM"}), 400
+        if range_config["start"] == range_config["end"]:
+            return jsonify({"error": f"config.ranges[{i}] : début et fin identiques"}), 400
+        all_intervals.append(_range_to_intervals(range_config))
+
+    for i in range(len(all_intervals)):
+        for j in range(i + 1, len(all_intervals)):
+            for iv1 in all_intervals[i]:
+                for iv2 in all_intervals[j]:
+                    if _intervals_overlap(iv1, iv2):
+                        return jsonify({"error": f"config.ranges[{i}] et config.ranges[{j}] se chevauchent"}), 400
+
+    return None
+
+
 def _validate_rule_payload(rule_type, config):
     """Vérifie la forme de `config` selon `rule_type`. Retourne un tuple
     (réponse, code) à renvoyer tel quel en cas d'erreur, sinon None."""
     if rule_type == "schedule":
-        for field in ("start", "end"):
-            value = config.get(field)
-            if not isinstance(value, str) or not _HHMM_RE.match(value):
-                return jsonify({"error": f"config.{field} doit être au format HH:MM"}), 400
-        return None
+        return _validate_schedule_ranges(config.get("ranges"))
 
     if rule_type == "threshold":
         if config.get("sensor") not in SENSOR_FIELDS:
             return jsonify({"error": "config.sensor doit être un capteur connu"}), 400
         if config.get("comparator") not in ("above", "below"):
             return jsonify({"error": "config.comparator doit être 'above' ou 'below'"}), 400
-        threshold = config.get("threshold")
-        if not isinstance(threshold, (int, float)) or isinstance(threshold, bool):
+        if not _is_number(config.get("threshold")):
             return jsonify({"error": "config.threshold doit être un nombre"}), 400
-        window = config.get("window_minutes")
-        if not isinstance(window, int) or isinstance(window, bool) or window <= 0:
-            return jsonify({"error": "config.window_minutes doit être un entier positif"}), 400
+
+        action_mode = config.get("action_mode")
+        if action_mode == "duration":
+            duration = config.get("duration_minutes")
+            if not _is_number(duration) or duration <= 0:
+                return jsonify({"error": "config.duration_minutes doit être un nombre positif"}), 400
+        elif action_mode == "until_target":
+            if not _is_number(config.get("target_value")):
+                return jsonify({"error": "config.target_value doit être un nombre"}), 400
+        else:
+            return jsonify({"error": "config.action_mode doit être 'duration' ou 'until_target'"}), 400
         return None
 
     return jsonify({"error": "rule_type doit être 'schedule' ou 'threshold'"}), 400
