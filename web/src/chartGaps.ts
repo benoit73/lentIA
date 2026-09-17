@@ -28,3 +28,26 @@ export function withGapBreaks(data: HistoryPoint[], gapMs: number = SENSOR_STALE
 
   return points;
 }
+
+/**
+ * Moyenne mobile (fenêtre glissante) sur les valeurs réelles, pour amortir
+ * le bruit de mesure (ex. HC-SR04 qui saute occasionnellement à 0 ou 100 sur
+ * un écho parasite) sans cacher les vraies coupures : la fenêtre se
+ * réinitialise à chaque point `null` (`withGapBreaks`) au lieu de lisser à
+ * travers un trou.
+ */
+export function smoothPoints(points: GappedPoint[], windowSize: number): GappedPoint[] {
+  if (windowSize <= 1) return points;
+
+  const buffer: number[] = [];
+  return points.map((point) => {
+    if (point.value === null) {
+      buffer.length = 0; // pas de lissage entre deux segments séparés par un trou
+      return point;
+    }
+    buffer.push(point.value);
+    if (buffer.length > windowSize) buffer.shift();
+    const average = buffer.reduce((sum, v) => sum + v, 0) / buffer.length;
+    return { ...point, value: Math.round(average * 10) / 10 };
+  });
+}

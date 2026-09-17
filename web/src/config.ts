@@ -10,6 +10,10 @@ export const SENSOR_STALE_MS = 15_000;
 // manuelles faites ailleurs et les changements de l'automatisation.
 export const ACTUATOR_POLL_MS = 5_000;
 
+// Taille de la fenêtre de moyenne mobile appliquée aux courbes (amortit le
+// bruit de mesure, ex. HC-SR04). 1 = pas de lissage.
+export const CHART_SMOOTHING_WINDOW = 5;
+
 export interface SensorMeta {
   key: string;
   label: string;

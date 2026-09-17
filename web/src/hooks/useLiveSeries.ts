@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { HistoryRange } from "../api";
-import { withGapBreaks } from "../chartGaps";
-import { SENSOR_STALE_MS } from "../config";
+import { smoothPoints, withGapBreaks } from "../chartGaps";
+import { CHART_SMOOTHING_WINDOW, SENSOR_STALE_MS } from "../config";
 import { useSensorHistory } from "./useSensorHistory";
 
 export interface LiveChartPoint {
@@ -57,7 +57,7 @@ export function useLiveSeries(sensor: string, range: HistoryRange, { live, liveV
     (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
   );
 
-  const points: LiveChartPoint[] = withGapBreaks(combined).map((p) => ({
+  const points: LiveChartPoint[] = smoothPoints(withGapBreaks(combined), CHART_SMOOTHING_WINDOW).map((p) => ({
     time: new Date(p.created_at).getTime(),
     value: p.value,
   }));

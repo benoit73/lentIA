@@ -107,6 +107,13 @@ deux. Ce comportement live ne s'applique qu'aux préréglages relatifs (1h,
 l'utilisateur), le graphe reste un instantané de cette plage, sans curseur
 « maintenant » ni valeurs temps réel ajoutées après coup.
 
+Les relevés réels passent aussi par `smoothPoints` (`web/src/chartGaps.ts`) :
+une moyenne mobile sur `CHART_SMOOTHING_WINDOW` points (`web/src/config.ts`,
+5 par défaut) avant l'affichage, pour amortir le bruit de mesure — le
+HC-SR04 en particulier peut sauter ponctuellement à 0 ou 100% sur un écho
+parasite. La fenêtre se réinitialise à chaque trou (`withGapBreaks`) : on ne
+lisse jamais à travers une coupure réelle.
+
 ## Actionneurs (lumière, chauffage, arrosage, ventilation)
 
 Pas de matériel branché pour l'instant, mais le circuit complet existe déjà
