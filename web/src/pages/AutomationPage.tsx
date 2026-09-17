@@ -66,9 +66,32 @@ const DEFAULT_HEATING: FlexibleForm = {
   },
 };
 
+// Une règle en base peut venir d'un ancien schéma (avant la refonte
+// plage/seuil multi-plages) : on retombe sur les valeurs par défaut plutôt
+// que de planter si la forme ne correspond pas à ce qu'on attend.
+function isValidRanges(ranges: unknown): ranges is TimeRange[] {
+  return (
+    Array.isArray(ranges) &&
+    ranges.length > 0 &&
+    ranges.every((r) => r && typeof r === "object" && typeof (r as TimeRange).start === "string" && typeof (r as TimeRange).end === "string")
+  );
+}
+
+function isValidThresholdConfig(config: unknown): config is ThresholdConfig {
+  if (!config || typeof config !== "object") return false;
+  const c = config as ThresholdConfig;
+  return (
+    typeof c.sensor === "string" &&
+    (c.comparator === "above" || c.comparator === "below") &&
+    typeof c.threshold === "number" &&
+    (c.action_mode === "duration" || c.action_mode === "until_target")
+  );
+}
+
 function toScheduleOnlyForm(rule: AutomationRule | undefined, fallback: ScheduleOnlyForm): ScheduleOnlyForm {
   if (!rule || rule.rule_type !== "schedule") return fallback;
   const config = rule.config as ScheduleConfig;
+  if (!isValidRanges(config?.ranges)) return fallback;
   return { enabled: rule.enabled, ranges: config.ranges };
 }
 
@@ -76,9 +99,11 @@ function toFlexibleForm(rule: AutomationRule | undefined, fallback: FlexibleForm
   if (!rule) return fallback;
   if (rule.rule_type === "schedule") {
     const config = rule.config as ScheduleConfig;
+    if (!isValidRanges(config?.ranges)) return fallback;
     return { ...fallback, enabled: rule.enabled, ruleType: "schedule", ranges: config.ranges };
   }
-  const config = rule.config as ThresholdConfig;
+  if (!isValidThresholdConfig(rule.config)) return fallback;
+  const config = rule.config;
   return {
     ...fallback,
     enabled: rule.enabled,
