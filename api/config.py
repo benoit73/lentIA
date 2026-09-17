@@ -19,3 +19,28 @@ SENSOR_FIELDS = [
     "luminosity",
     "water_level",
 ]
+
+# Un topic de commande par actionneur, ex. lentia/actuators/light/set.
+# Pas de matériel branché pour l'instant : la commande est publiée sur MQTT
+# et enregistrée en base, prête pour quand le Pico pilotera les relais.
+ACTUATOR_TOPIC_PREFIX = os.environ.get("ACTUATOR_TOPIC_PREFIX", "lentia/actuators")
+
+ACTUATOR_FIELDS = [
+    "light",
+    "heating",
+    "watering",
+    "ventilation",
+]
+
+# Intervalle (secondes) entre deux évaluations des règles d'automatisation.
+AUTOMATION_POLL_SECONDS = int(os.environ.get("AUTOMATION_POLL_SECONDS", "30"))
+
+# Authentification (Google Sign-In / OpenID Connect) pour le dashboard React.
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
+# Liste blanche d'emails autorisés à se connecter (vide = n'importe quel
+# compte Google valide est accepté).
+ALLOWED_EMAILS = {
+    email.strip().lower()
+    for email in os.environ.get("ALLOWED_EMAILS", "").split(",")
+    if email.strip()
+}

@@ -14,11 +14,21 @@ MQTT_CLIENT_ID = "pico_terrarium"
 MQTT_USER = None                   # None si le broker n'a pas d'authentification
 MQTT_PASSWORD = None
 MQTT_TOPIC_PREFIX = "lentia/sensors"  # un topic par capteur : lentia/sensors/<capteur>
+ACTUATOR_TOPIC_PREFIX = "lentia/actuators"  # commandes : lentia/actuators/<actionneur>/set
 
 # HC-SR04 (niveau du reservoir) : distance capteur -> eau, en cm, a calibrer
 # sur le reservoir reel.
 RESERVOIR_FULL_CM = 5.0    # distance quand le reservoir est plein (eau haute, distance courte)
 RESERVOIR_EMPTY_CM = 25.0  # distance quand le reservoir est vide (eau basse, distance longue)
+
+# Broches des relais actionneurs - pas encore cables, a adapter au montage
+# reel (relais actif a l'etat haut suppose ici).
+ACTUATOR_PINS = {
+    "light": 16,
+    "heating": 17,
+    "watering": 18,
+    "ventilation": 19,
+}
 # ========================
 
 
@@ -34,10 +44,36 @@ def connect_wifi():
     return wlan
 
 
+actuator_pins = {nom: Pin(broche, Pin.OUT) for nom, broche in ACTUATOR_PINS.items()}
+for pin in actuator_pins.values():
+    pin.value(0)
+
+
+def on_actuator_command(topic, msg):
+    """Callback MQTT : lentia/actuators/<actionneur>/set -> actionne le
+    relais correspondant. Prepare pour quand le materiel sera cable."""
+    topic = topic.decode()
+    prefixe = ACTUATOR_TOPIC_PREFIX + "/"
+    if not topic.startswith(prefixe):
+        return
+    actionneur = topic[len(prefixe):].split("/")[0]
+    pin = actuator_pins.get(actionneur)
+    if pin is None:
+        return
+    try:
+        etat = ujson.loads(msg)
+    except ValueError:
+        return
+    pin.value(1 if etat else 0)
+    print("Actionneur", actionneur, "->", "ON" if etat else "OFF")
+
+
 def connect_mqtt():
     client = MQTTClient(MQTT_CLIENT_ID, MQTT_BROKER, port=MQTT_PORT,
                          user=MQTT_USER, password=MQTT_PASSWORD)
+    client.set_callback(on_actuator_command)
     client.connect()
+    client.subscribe(("%s/+/set" % ACTUATOR_TOPIC_PREFIX).encode())
     print("Connecte au broker MQTT")
     return client
 
@@ -129,5 +165,11 @@ while True:
         except OSError as e:
             print("Erreur MQTT, reconnexion...", e)
             mqtt = connect_mqtt()
+
+    try:
+        mqtt.check_msg()  # traite les commandes actionneurs recues (non bloquant)
+    except OSError as e:
+        print("Erreur MQTT (check_msg), reconnexion...", e)
+        mqtt = connect_mqtt()
 
     time.sleep(1)

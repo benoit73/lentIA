@@ -42,8 +42,22 @@ services:
       MQTT_PORT: 1883
       MQTT_TOPIC_PREFIX: lentia/sensors
       DATABASE_URL: postgresql://lentia:lentia@postgres:5432/lentia
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      ALLOWED_EMAILS: ${ALLOWED_EMAILS}
     ports:
-      - "5000:5000"   # API REST + dashboard web
+      - "5000:5000"   # API REST (protégée par OAuth) + WebSocket
+    restart: unless-stopped
+
+  dashboard:
+    build:
+      context: ./web
+      args:
+        VITE_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+    container_name: lentia-dashboard
+    depends_on:
+      - api
+    ports:
+      - "3000:80"   # Dashboard React (nginx relaie /api et /ws vers l'API)
     restart: unless-stopped
 
   mqtt-test-client:

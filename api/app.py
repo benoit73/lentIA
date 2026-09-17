@@ -7,10 +7,12 @@ Rôles répartis entre modules :
 - realtime.py     : pub/sub en mémoire entre mqtt_ingest et les routes WebSocket
 - routes.py       : routes HTTP REST (santé, liste des capteurs, historique)
 - ws.py           : routes WebSocket (une par capteur, temps réel)
+- automation.py   : évaluation périodique des règles d'automatisation
 """
 
 from flask import Flask, send_from_directory
 
+import automation
 import mqtt_ingest
 import ws
 from routes import bp as routes_bp
@@ -32,4 +34,5 @@ app = create_app()
 
 if __name__ == "__main__":
     mqtt_ingest.start()
+    automation.start()
     app.run(host="0.0.0.0", port=5000, threaded=True)

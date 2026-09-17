@@ -1,5 +1,7 @@
 """Client MQTT interne à l'API : s'abonne à lentia/sensors/+, persiste chaque
-relevé en base et le diffuse aux abonnés temps réel (routes WebSocket)."""
+relevé en base et le diffuse aux abonnés temps réel (routes WebSocket).
+Le même client sert aussi à publier les commandes d'actionneurs
+(lentia/actuators/<actionneur>/set) envoyées depuis le dashboard."""
 
 import json
 import time
@@ -7,8 +9,10 @@ import time
 import paho.mqtt.client as mqtt
 
 import db
-from config import MQTT_HOST, MQTT_PORT, MQTT_SUBSCRIBE_TOPIC, SENSOR_FIELDS
+from config import ACTUATOR_TOPIC_PREFIX, MQTT_HOST, MQTT_PORT, MQTT_SUBSCRIBE_TOPIC, SENSOR_FIELDS
 from realtime import broadcaster
+
+_client = None
 
 
 def on_connect(client, userdata, flags, rc):
@@ -42,6 +46,8 @@ def on_message(client, userdata, msg):
 
 
 def start():
+    global _client
+
     client = mqtt.Client()
     client.on_connect = on_connect
     client.on_message = on_message
@@ -58,4 +64,13 @@ def start():
         raise RuntimeError("Impossible de joindre le broker MQTT")
 
     client.loop_start()  # tourne dans un thread séparé, non-bloquant
+    _client = client
     return client
+
+
+def publish_actuator_command(actuator: str, state: bool):
+    """Publie une commande sur lentia/actuators/<actionneur>/set. Le Pico
+    (une fois câblé) s'y abonne et actionne le relais correspondant."""
+    if _client is None:
+        raise RuntimeError("client MQTT non connecté")
+    _client.publish(f"{ACTUATOR_TOPIC_PREFIX}/{actuator}/set", json.dumps(state))

@@ -1,30 +1,694 @@
-<!doctype html>
-<html lang="fr">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>lentIA — Dashboard</title>
-  <link rel="stylesheet" href="/static/style.css" />
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<!DOCTYPE html>
+
+<html class="h-full" lang="fr"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>LentIA — Capteurs de la serre</title>
+<link href="/static/favicon.svg" rel="icon" type="image/svg+xml"/>
+<!-- Tailwind CSS v3 with plugins -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Tailwind Configuration -->
+<script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            theme: {
+              bg: '#B8BFD6',
+              card: '#ECEEF5',
+              cardLight: '#F5F6FA',
+              accent: '#8E94F2',
+              purpleGlass: '#6E62B5',
+              lilacGlow: '#D1D5F5',
+              greenSoft: '#4EBA88',
+              textPrimary: '#1E202B',
+              textSecondary: '#6F7285',
+              textMuted: '#9B9EB2'
+            }
+          },
+          borderRadius: {
+            '3xl': '1.85rem',
+            '4xl': '2.3rem'
+          },
+          boxShadow: {
+            'soft-card': '0 12px 32px -4px rgba(78, 86, 115, 0.12), 0 4px 12px 0 rgba(78, 86, 115, 0.06)',
+            'inset-dial': 'inset 0 2px 6px rgba(0,0,0,0.06)',
+            'float-badge': '0 8px 24px rgba(66, 56, 110, 0.22)'
+          }
+        }
+      }
+    }
+  </script>
+<!-- Google Fonts: Plus Jakarta Sans -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<style data-purpose="global-styles">
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #B8BFD6;
+      user-select: none;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Custom scrollbar for modern subtle appearance */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.2);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(142, 148, 242, 0.5);
+      border-radius: 9999px;
+    }
+</style>
+<style>
+button[role="switch"], [data-purpose="top-navigation-pills"] nav, [data-purpose="bottom-actuators-bar"], [data-purpose="greenhouse-metrics-footer"], [data-purpose="isometric-greenhouse-view"], [data-purpose="left-controls"] button { display:none!important; }
+</style>
+<style data-purpose="glass-and-isometric-effects">
+    .glass-pill {
+      background: rgba(255, 255, 255, 0.88);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+
+    .greenhouse-grid-lines {
+      background-image: linear-gradient(rgba(142, 148, 242, 0.15) 1px, transparent 1px),
+                        linear-gradient(90deg, rgba(142, 148, 242, 0.15) 1px, transparent 1px);
+      background-size: 28px 28px;
+    }
+
+    /* Custom range slider styling */
+    input[type=range].slider-purple {
+      -webkit-appearance: none;
+      background: transparent;
+    }
+    input[type=range].slider-purple::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      height: 18px;
+      width: 18px;
+      border-radius: 50%;
+      background: #FFFFFF;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+      cursor: pointer;
+      margin-top: -5px;
+    }
+    input[type=range].slider-purple::-webkit-slider-runnable-track {
+      height: 8px;
+      background: #8E94F2;
+      border-radius: 9999px;
+    }
+  </style>
 </head>
-<body>
-  <header>
-    <h1>🌱 lentIA — Suivi du bac de lentilles</h1>
-    <span id="connection-status" class="badge badge--pending">Temps réel : connexion…</span>
-  </header>
+<body class="min-h-full flex items-center justify-center p-3 sm:p-5 lg:p-7 text-theme-textPrimary">
+<!-- BEGIN: MainDashboardContainer -->
+<main class="w-full max-w-[1360px] flex flex-col gap-4 lg:gap-5" data-purpose="dashboard-wrapper">
+<!-- Top Grid: Left Side Controls & Central Greenhouse Visualizer -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-5">
+<!-- BEGIN: LeftControlColumn -->
+<aside class="contents" data-purpose="left-controls">
+<!-- Card 1: Arrosage & Irrigation (Bac Unique 12m²) -->
+<!-- BEGIN: IrrigationCard -->
+<article class="order-1 lg:col-span-4 lg:h-[430px] self-start w-full bg-theme-card rounded-3xl p-4 shadow-soft-card flex flex-col relative overflow-hidden transition duration-300 hover:shadow-lg" data-purpose="irrigation-card">
+<div class="flex items-center justify-between">
+<div>
+<h2 class="font-bold text-lg text-theme-textPrimary tracking-tight">Humidité du sol</h2>
+<p class="text-xs text-theme-textSecondary mt-0.5 font-medium">Sonde à 15 cm · Bac unique</p>
+</div>
+<!-- Toggle Switch (Active) -->
+<button aria-checked="true" class="w-12 h-6 bg-theme-greenSoft rounded-full p-1 flex items-center justify-end shadow-inner cursor-pointer transition-colors duration-200" data-purpose="irrigation-toggle" role="switch" type="button">
+<span class="w-4 h-4 bg-white rounded-full shadow-md transform transition-transform"></span>
+</button>
+</div>
+<!-- Central Actuator Display : Goutte-à-goutte continu pour Bac Unique -->
+<div class="hidden py-4 flex-col items-center justify-center relative" data-purpose="actuator-display">
+<!-- Radial Glow Base -->
+<div class="w-32 h-32 bg-theme-lilacGlow/40 rounded-full blur-xl absolute"></div>
+<!-- Smart Sprayer Disc Actuator Illustration -->
+<div class="w-24 h-24 bg-gradient-to-b from-white to-[#E0E3F0] rounded-full shadow-md flex items-center justify-center border border-white relative z-10">
+<div class="w-16 h-16 rounded-full border-2 border-dashed border-theme-accent/60 flex items-center justify-center bg-white relative">
+<svg class="w-8 h-8 text-theme-accent" fill="none" stroke="currentColor" stroke-width="1.8" viewbox="0 0 24 24">
+<path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span class="absolute -top-1 -right-1 flex h-3 w-3">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+<span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+</span>
+</div>
+</div>
+<!-- Dynamic readouts -->
+<div class="flex flex-col items-center mt-2 z-10">
+<span class="text-[11px] font-bold text-theme-textPrimary tracking-wide uppercase">Mesure du capteur</span>
+<div class="flex items-center gap-1.5 mt-0.5">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+<span class="text-xs font-semibold text-emerald-600">Humidité optimale 68.4%</span>
+</div>
+<span class="text-[10px] text-theme-textSecondary mt-0.5">Dernier relevé : 10:42</span>
+</div>
+</div>
+<!-- Bottom Action Buttons: Sparkle, Profil Hydrique Bac Unique, Débit -->
+<div class="hidden items-center justify-between gap-2 pt-1 border-t border-slate-200/50">
+<button class="w-9 h-9 rounded-2xl bg-white flex items-center justify-center text-theme-textSecondary hover:text-theme-accent shadow-sm transition" title="Optimisation IA continue" type="button">
+<svg class="w-4 h-4" fill="currentColor" viewbox="0 0 24 24"><path d="M12 2l1.6 5.2L18 8.8l-4.4 3.2L15.2 18 12 14.8 8.8 18l1.6-6-4.4-3.2 4.4-1.6L12 2z"></path></svg>
+</button>
+<a class="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 bg-white hover:bg-slate-50 text-theme-accent hover:text-purple-700 rounded-2xl shadow-sm text-xs font-bold transition border border-theme-accent/20" href="humidity.html" title="Accéder à la vue hydrique détaillée">
+<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24">
+<path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span>Vue Hydrique Bac Unique</span>
+</a>
+<button class="w-9 h-9 rounded-2xl bg-white flex items-center justify-center text-theme-textSecondary hover:text-theme-accent shadow-sm transition" title="Régler débit &amp; vannes" type="button">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24">
+<path d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</button>
+</div>
+<div class="mt-4 rounded-2xl bg-white/75 p-4 border border-white shadow-sm" data-purpose="humidity-mini-chart">
+<div class="flex items-end justify-between gap-3 mb-3 pb-3 border-b border-slate-200/70">
+<div>
+<span class="block text-[10px] uppercase tracking-wider font-bold text-theme-textSecondary">Dernière donnée obtenue</span>
+<span class="block mt-1 text-2xl font-extrabold tracking-tight text-theme-textPrimary" data-sensor-value="soil_humidity">68,4%</span>
+</div>
+<span class="text-[11px] font-bold text-theme-accent">Aujourd’hui · 10:42</span>
+</div>
+<div class="text-[11px] font-bold text-theme-textPrimary mb-1">Évolution sur 24 h</div>
+<svg aria-label="Courbe d’humidité du sol sur 24 heures" class="w-full h-auto" role="img" viewbox="0 0 260 112">
+<defs><linearGradient id="humidityArea" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#8E94F2" stop-opacity=".32"/><stop offset="1" stop-color="#8E94F2" stop-opacity="0"/></linearGradient></defs>
+<g stroke="#DDE1EE" stroke-dasharray="3 4" stroke-width="1"><line x1="28" x2="252" y1="18" y2="18"/><line x1="28" x2="252" y1="51" y2="51"/><line x1="28" x2="252" y1="84" y2="84"/></g>
+<line x1="28" x2="252" y1="68" y2="68" stroke="#E77979" stroke-dasharray="5 4" stroke-width="1.5"/>
+<path d="M28 62 C55 66 72 67 93 66 C96 48 108 38 126 40 C153 44 174 51 194 50 C204 40 220 43 252 47 L252 92 L28 92Z" fill="url(#humidityArea)"/>
+<path d="M28 62 C55 66 72 67 93 66 C96 48 108 38 126 40 C153 44 174 51 194 50 C204 40 220 43 252 47" fill="none" stroke="#8E94F2" stroke-linecap="round" stroke-width="4"/>
+<circle cx="252" cy="47" fill="#6F73DC" r="5" stroke="#FFFFFF" stroke-width="2"/>
+<g fill="#8B90A5" font-size="8" font-weight="600"><text x="0" y="21">80%</text><text x="0" y="54">65%</text><text x="0" y="87">50%</text><text x="28" y="105">00h</text><text x="97" y="105">08h</text><text x="172" y="105">16h</text><text x="233" y="105">24h</text></g>
+</svg>
+<div class="mt-1 flex items-center gap-2 text-[10px] font-semibold text-theme-textSecondary"><span class="inline-block w-3 h-1 rounded-full bg-theme-accent"></span>Humidité du sol · Sonde -15 cm</div>
+</div>
+</article>
+<!-- END: IrrigationCard -->
+<!-- Card 2: Climat & Température (Dial Gauge) -->
+<!-- BEGIN: ClimateCard -->
+<article class="order-3 lg:col-span-5 lg:h-[430px] self-start w-full bg-theme-card rounded-3xl p-3 shadow-soft-card flex flex-col relative transition duration-300 hover:shadow-lg" data-purpose="climate-card">
+<div class="flex items-center justify-between">
+<div>
+<h2 class="font-bold text-lg text-theme-textPrimary tracking-tight">Climat &amp; Température</h2>
+<p class="text-xs text-theme-textSecondary mt-0.5 font-medium">Capteur d’ambiance central</p>
+</div>
+<!-- Inactive/Standby Toggle -->
+<button aria-checked="false" class="w-12 h-6 bg-slate-300 rounded-full p-1 flex items-center justify-start shadow-inner cursor-pointer" data-purpose="climate-toggle" role="switch" type="button">
+<span class="w-4 h-4 bg-white rounded-full shadow-md"></span>
+</button>
+</div>
+<!-- Gauge Dial Graphic -->
+<div class="hidden relative flex-col items-center justify-center my-1" data-purpose="radial-dial-gauge">
+<svg class="w-44 h-24" viewbox="0 0 200 110">
+<!-- Background Arc -->
+<path d="M 25 100 A 75 75 0 0 1 175 100" fill="none" stroke="#D7DBEC" stroke-dasharray="2 6" stroke-linecap="round" stroke-width="5"></path>
+<!-- Active Progress Arc (from 10° to ~24°) -->
+<path d="M 25 100 A 75 75 0 0 1 115 27" fill="none" stroke="#8E94F2" stroke-linecap="round" stroke-width="6"></path>
+<!-- Marker indicator dot -->
+<circle cx="115" cy="27" fill="#5F65D6" r="4.5" stroke="#FFFFFF" stroke-width="2"></circle>
+</svg>
+<!-- Target Temp Label on Arc -->
+<span class="absolute top-2 right-12 text-[11px] font-semibold text-theme-textSecondary">Cible 22°</span>
+<!-- Big Temperature Digital readout -->
+<div class="flex items-baseline gap-0.5 -mt-3">
+<span class="text-4xl font-extrabold tracking-tight text-theme-textPrimary">24</span>
+<span class="text-xl font-bold text-theme-textSecondary">.2°C</span>
+</div>
+<!-- Lower bounds indicators -->
+<div class="w-full flex justify-between px-6 text-[11px] font-semibold text-theme-textMuted mt-1">
+<span>10°</span>
+<span class="text-xs text-emerald-600 font-bold">Optimal</span>
+<span>40°</span>
+</div>
+</div>
+<div class="mt-2 rounded-2xl bg-white/75 p-3 border border-white shadow-sm" data-purpose="temperature-mini-chart">
+<div class="flex items-end justify-between gap-3 mb-2 pb-2 border-b border-slate-200/70">
+<div>
+<span class="block text-[10px] uppercase tracking-wider font-bold text-theme-textSecondary">Dernière donnée obtenue</span>
+<span class="block mt-1 text-2xl font-extrabold tracking-tight text-theme-textPrimary" data-sensor-value="temperature">24,2°C</span>
+</div>
+<span class="text-[11px] font-bold text-theme-accent">Aujourd’hui · 10:42</span>
+</div>
+<div class="text-[11px] font-bold text-theme-textPrimary mb-1">Évolution sur 24 h</div>
+<svg aria-label="Courbe de température sur 24 heures" class="w-full h-auto" role="img" viewbox="0 0 260 112">
+<defs><linearGradient id="temperatureArea" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#F29B75" stop-opacity=".32"/><stop offset="1" stop-color="#F29B75" stop-opacity="0"/></linearGradient></defs>
+<g stroke="#DDE1EE" stroke-dasharray="3 4" stroke-width="1"><line x1="28" x2="252" y1="18" y2="18"/><line x1="28" x2="252" y1="51" y2="51"/><line x1="28" x2="252" y1="84" y2="84"/></g>
+<path d="M28 70 C55 76 78 72 96 63 C119 51 137 35 160 32 C184 30 204 42 222 48 C234 52 243 51 252 48 L252 92 L28 92Z" fill="url(#temperatureArea)"/>
+<path d="M28 70 C55 76 78 72 96 63 C119 51 137 35 160 32 C184 30 204 42 222 48 C234 52 243 51 252 48" fill="none" stroke="#F08A63" stroke-linecap="round" stroke-width="4"/>
+<circle cx="252" cy="48" fill="#E87852" r="5" stroke="#FFFFFF" stroke-width="2"/>
+<g fill="#8B90A5" font-size="8" font-weight="600"><text x="2" y="21">30°</text><text x="2" y="54">24°</text><text x="2" y="87">18°</text><text x="28" y="105">00h</text><text x="97" y="105">08h</text><text x="172" y="105">16h</text><text x="233" y="105">24h</text></g>
+</svg>
+<div class="mt-1 flex items-center gap-2 text-[10px] font-semibold text-theme-textSecondary"><span class="inline-block w-3 h-1 rounded-full bg-orange-400"></span>Température · Capteur d’ambiance</div>
+</div>
+</article>
+<!-- END: ClimateCard -->
+<!-- Card 3: Éclairage Horticole LED -->
+<!-- BEGIN: LightingCard -->
+<article class="order-4 lg:col-span-3 lg:h-[430px] self-start w-full bg-theme-card rounded-3xl p-3 shadow-soft-card flex flex-col relative transition duration-300 hover:shadow-lg" data-purpose="grow-light-card">
+<div class="flex items-center justify-between">
+<div>
+<h2 class="font-bold text-lg text-theme-textPrimary tracking-tight">Éclairage horticole</h2>
+<p class="text-xs text-theme-textSecondary mt-0.5 font-medium">Capteur au niveau des plantations</p>
+</div>
+<!-- Active Toggle -->
+<button aria-checked="true" class="w-12 h-6 bg-theme-greenSoft rounded-full p-1 flex items-center justify-end shadow-inner cursor-pointer" data-purpose="lighting-toggle" role="switch" type="button">
+<span class="w-4 h-4 bg-white rounded-full shadow-md"></span>
+</button>
+</div>
+<!-- Pendant Lamp Graphic with Golden-Violet Grow Spectrum -->
+<div class="mt-2 flex flex-1 min-h-0 items-center justify-center overflow-hidden rounded-2xl border border-white bg-white/45" data-purpose="lamp-visual">
+<!-- Pendant Grow Light SVG -->
+<div class="relative flex flex-col items-center">
+<!-- Cord -->
+<div class="w-0.5 h-8 bg-slate-400"></div>
+<!-- Lamp Fixture -->
+<div class="w-32 h-8 bg-gradient-to-b from-[#F2F4FB] to-[#C7CCDE] rounded-t-full shadow-md relative"></div>
+<div class="w-36 h-3 bg-slate-200 rounded-full -mt-0.5 shadow-sm border-t border-white"></div>
+<!-- Light Glow Beam -->
+<div class="w-44 h-16 bg-gradient-to-b from-amber-200/70 via-purple-300/30 to-transparent blur-md -mt-1 rounded-b-3xl pointer-events-none"></div>
+<span class="absolute top-[46px] text-[10px] font-extrabold uppercase tracking-widest text-amber-700">Lampe allumée</span>
+</div>
+</div>
+<!-- Brightness Range Controller Pill -->
+<div class="hidden items-center gap-3 pt-2">
+<div class="flex-1 h-9 bg-theme-accent/80 rounded-2xl flex items-center px-3 gap-2 shadow-inner text-white">
+<svg class="w-4 h-4 text-white" fill="currentColor" viewbox="0 0 20 20">
+<path d="M11 3a1 1 0 10-2 0v1a1 1 0 102 0V3zM15.657 5.757a1 1 0 00-1.414-1.414l-.707.707a1 1 0 001.414 1.414l.707-.707zM18 10a1 1 0 01-1 1h-1a1 1 0 110-2h1a1 1 0 011 1zM5.05 6.464A1 1 0 106.464 5.05l-.707-.707a1 1 0 00-1.414 1.414l.707.707zM5 10a1 1 0 01-1 1H3a1 1 0 110-2h1a1 1 0 011 1zM7.757 14.243a1 1 0 00-1.414 1.414l.707.707a1 1 0 001.414-1.414l-.707-.707zM10 16a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM14.243 14.243a1 1 0 011.414 1.414l-.707.707a1 1 0 01-1.414-1.414l.707-.707z"></path>
+</svg>
+<input aria-label="Intensité lumineuse" class="w-full slider-purple cursor-pointer" max="100" min="0" type="range" value="75"/>
+</div>
+<div class="w-14 h-9 bg-white rounded-2xl flex items-center justify-center font-bold text-xs shadow-sm text-theme-textPrimary">
+              Luminosité
+            </div>
+</div>
+<div class="mt-2 rounded-2xl border border-white bg-white/75 p-3 shadow-sm" data-purpose="lentil-light-progress">
+<div class="flex items-start justify-between gap-3">
+<div>
+<span class="block text-[10px] uppercase tracking-wider font-bold text-theme-textSecondary">Exposition lumineuse</span>
+<span class="block mt-1 text-xl font-extrabold text-theme-textPrimary">12 h sur 16 h</span>
+</div>
+<span class="rounded-xl bg-theme-accent/10 px-2.5 py-1 text-xs font-extrabold text-theme-accent">4 h restantes</span>
+</div>
+<div aria-label="Cycle lumineux effectué à 75 %" aria-valuemax="16" aria-valuemin="0" aria-valuenow="12" class="mt-4 h-3 overflow-hidden rounded-full bg-slate-200" role="progressbar">
+<div class="h-full w-3/4 rounded-full bg-gradient-to-r from-amber-300 via-theme-accent to-purple-500"></div>
+</div>
+<div class="mt-2 flex justify-between text-[10px] font-semibold text-theme-textMuted"><span>Début 06:00</span><span>Fin prévue 22:00</span></div>
+<p class="mt-2 text-[10px] leading-relaxed text-theme-textSecondary">Cycle cible de 16 h pour la croissance des lentilles.</p>
+</div>
+</article>
+<!-- END: LightingCard -->
+<!-- BEGIN: AirHumidityCard -->
+<article class="order-5 lg:col-span-5 self-start w-full bg-theme-card rounded-3xl p-3 shadow-soft-card flex flex-col relative transition duration-300 hover:shadow-lg" data-purpose="air-humidity-card">
+<div class="flex items-start justify-between gap-3">
+<div><h2 class="font-bold text-lg text-theme-textPrimary tracking-tight">Humidité de l’air</h2><p class="text-xs text-theme-textSecondary mt-0.5 font-medium">Capteur d’ambiance central</p></div>
+</div>
+<div class="mt-2 rounded-2xl bg-white/75 p-3 border border-white shadow-sm" data-purpose="air-humidity-mini-chart">
+<div class="flex items-end justify-between gap-3 mb-2 pb-2 border-b border-slate-200/70">
+<div><span class="block text-[10px] uppercase tracking-wider font-bold text-theme-textSecondary">Dernière donnée obtenue</span><span class="block mt-1 text-2xl font-extrabold tracking-tight text-theme-textPrimary" data-sensor-value="air_humidity">71%</span></div>
+<span class="text-[11px] font-bold text-cyan-600">Aujourd’hui · 10:42</span>
+</div>
+<div class="text-[11px] font-bold text-theme-textPrimary mb-1">Évolution sur 24 h</div>
+<svg aria-label="Courbe d’humidité de l’air sur 24 heures" class="w-full h-auto" role="img" viewbox="0 0 260 112">
+<defs><linearGradient id="airHumidityArea" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#65C7DE" stop-opacity=".32"/><stop offset="1" stop-color="#65C7DE" stop-opacity="0"/></linearGradient></defs>
+<g stroke="#DDE1EE" stroke-dasharray="3 4" stroke-width="1"><line x1="28" x2="252" y1="18" y2="18"/><line x1="28" x2="252" y1="51" y2="51"/><line x1="28" x2="252" y1="84" y2="84"/></g>
+<path d="M28 45 C55 43 78 44 98 38 C120 34 142 51 163 58 C184 62 201 47 220 39 C234 36 243 39 252 40 L252 92 L28 92Z" fill="url(#airHumidityArea)"/>
+<path d="M28 45 C55 43 78 44 98 38 C120 34 142 51 163 58 C184 62 201 47 220 39 C234 36 243 39 252 40" fill="none" stroke="#62C4DC" stroke-linecap="round" stroke-width="4"/>
+<circle cx="252" cy="40" fill="#45AEC8" r="5" stroke="#FFFFFF" stroke-width="2"/>
+<g fill="#8B90A5" font-size="8" font-weight="600"><text x="0" y="21">80%</text><text x="0" y="54">70%</text><text x="0" y="87">60%</text><text x="28" y="105">00h</text><text x="97" y="105">08h</text><text x="172" y="105">16h</text><text x="233" y="105">24h</text></g>
+</svg>
+<div class="mt-1 flex items-center gap-2 text-[10px] font-semibold text-theme-textSecondary"><span class="inline-block w-3 h-1 rounded-full bg-cyan-400"></span>Humidité de l’air · Capteur central</div>
+</div>
+</article>
+<!-- END: AirHumidityCard -->
+<!-- BEGIN: WaterTankCard -->
+<article class="order-6 lg:col-span-7 self-start w-full bg-theme-card rounded-3xl p-5 shadow-soft-card relative overflow-hidden transition duration-300 hover:shadow-lg" data-purpose="water-tank-card">
+<div class="flex items-start justify-between gap-4">
+<div><h2 class="font-bold text-lg text-theme-textPrimary tracking-tight">Réservoir d’eau</h2><p class="text-xs text-theme-textSecondary mt-0.5 font-medium">Capteur de niveau · Dernier relevé à 10:42</p></div>
+<span class="rounded-xl bg-blue-50 px-3 py-1.5 text-xs font-extrabold text-blue-600">1 420 L restants</span>
+</div>
+<div class="mt-5">
+<div class="mb-3 flex items-center justify-between gap-4 text-xs font-semibold"><span class="text-theme-textSecondary">Niveau mesuré</span><span class="text-blue-600">Capteur en ligne</span></div>
+<div class="relative h-24 w-full overflow-hidden rounded-[28px] border-4 border-white bg-slate-200 shadow-inner" aria-label="Réservoir rempli à 82 %" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="82">
+<div class="absolute inset-y-0 left-0 w-[82%] bg-gradient-to-r from-blue-500 via-sky-400 to-cyan-300 transition-[width] duration-500" data-water-fill>
+<div class="absolute inset-y-0 right-0 w-2 bg-white/30"></div>
+<div class="absolute left-8 top-5 h-2 w-2 rounded-full bg-white/45"></div><div class="absolute left-1/2 bottom-4 h-1.5 w-1.5 rounded-full bg-white/40"></div>
+</div>
+<div class="absolute inset-0 grid place-items-center"><span class="rounded-xl bg-white/90 px-3 py-1.5 text-xl font-black text-blue-700 shadow-sm" data-sensor-value="water_level">82%</span></div>
+</div>
+<div class="mt-2 flex items-center justify-between text-[10px] font-semibold text-theme-textMuted"><span>0 L</span><span>1 420 L disponibles sur 1 730 L</span><span>1 730 L</span></div>
+</div>
+</article>
+<!-- END: WaterTankCard -->
+</aside>
+<!-- END: LeftControlColumn -->
+<!-- BEGIN: CenterGreenhouseVisualizer -->
+<section class="order-2 lg:col-span-8 bg-gradient-to-b from-[#E6E8F4] to-[#DBDFEE] rounded-4xl p-4 shadow-soft-card flex flex-col justify-between relative overflow-hidden min-h-[480px]" data-purpose="isometric-greenhouse-view">
+<!-- Greenhouse Background Subtle Grid Overlay -->
+<div class="absolute inset-0 greenhouse-grid-lines opacity-40 pointer-events-none"></div>
+<!-- Top Navigation Pills and Action Buttons -->
+<!-- BEGIN: GreenhouseTopNav -->
+<div class="relative z-20 flex flex-wrap items-center justify-between gap-3" data-purpose="top-navigation-pills">
+<!-- Sensor Categories Navigation Bar -->
+<nav aria-label="Vues de télémétrie" class="glass-pill rounded-full p-1.5 shadow-sm flex items-center gap-1 border border-white/70">
+<!-- Active Tab -->
+<button class="px-3.5 py-1.5 rounded-full bg-white shadow-sm text-xs font-bold text-theme-textPrimary flex items-center gap-1.5" type="button">
+<svg class="w-3.5 h-3.5 text-theme-accent" fill="none" stroke="currentColor" stroke-width="2.2" viewbox="0 0 24 24">
+<path d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span>Qualité air &amp; CO2</span>
+</button>
+<!-- Link to Detailed Moisture View -->
+<a class="px-3.5 py-1.5 rounded-full text-xs font-bold text-theme-accent hover:bg-white/80 transition flex items-center gap-1.5 bg-theme-accent/10 border border-theme-accent/30" href="humidity.html" title="Accéder au profil hydrique complet">
+<svg class="w-3.5 h-3.5" fill="currentColor" viewbox="0 0 20 20">
+<path clip-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" fill-rule="evenodd"></path>
+</svg>
+<span>Détail Hydrique (Bac Unique)</span>
+</a>
+<button class="px-3 py-1.5 rounded-full text-xs font-semibold text-theme-textSecondary hover:text-theme-textPrimary transition flex items-center gap-1" type="button">
+<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24"><path d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+<span>Ensoleillement</span>
+</button>
+<button class="px-3 py-1.5 rounded-full text-xs font-semibold text-theme-textSecondary hover:text-theme-textPrimary transition flex items-center gap-1" type="button">
+<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+<span>Énergie</span>
+</button>
+<button class="px-3 py-1.5 rounded-full text-xs font-semibold text-theme-textSecondary hover:text-theme-textPrimary transition flex items-center gap-1" type="button">
+<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24"><path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+<span>Caméras</span>
+</button>
+</nav>
+<!-- Right Action Controls (Config & Fullscreen) -->
+<div class="flex items-center gap-2">
+<button aria-label="Gestion des paramètres serre" class="w-9 h-9 rounded-full bg-white shadow-sm flex items-center justify-center text-theme-textSecondary hover:text-theme-textPrimary transition" type="button">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24"><path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+</button>
+<button aria-label="Mode plein écran" class="w-9 h-9 rounded-full bg-white shadow-sm flex items-center justify-center text-theme-textSecondary hover:text-theme-textPrimary transition" type="button">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24"><path d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+</button>
+</div>
+</div>
+<!-- END: GreenhouseTopNav -->
+<!-- 3D Glass Greenhouse Isometric Centerpiece (BAC UNIQUE CONTINU 12m², SANS CLOISON) -->
+<div class="relative w-full flex-1 flex items-center justify-center my-3 overflow-visible" data-purpose="isometric-canvas-area">
+<!-- Ambient Light Blur behind structure -->
+<div class="absolute w-[460px] h-[340px] bg-gradient-to-tr from-purple-300/40 via-indigo-200/40 to-emerald-200/30 rounded-full blur-3xl pointer-events-none"></div>
+<!-- Live Camera Mini PIP Card -->
+<div class="hidden absolute top-1 left-1/4 z-30 flex-col items-center">
+<div class="glass-pill p-1 rounded-2xl shadow-float-badge border border-white/80 flex flex-col items-center">
+<div class="relative w-28 h-20 rounded-xl overflow-hidden bg-slate-900">
+<div class="absolute inset-0 bg-gradient-to-tr from-emerald-950 to-slate-800 flex items-center justify-center text-center p-1">
+<div class="flex flex-col items-center">
+<span class="w-2 h-2 rounded-full bg-red-500 animate-ping mb-1"></span>
+<span class="text-[10px] text-white font-medium">Flux Direct #01</span>
+<span class="text-[8px] text-emerald-300">Bac Unique 12m²</span>
+</div>
+</div>
+<!-- Micro Live indicator badge -->
+<div class="absolute top-1.5 right-1.5 bg-black/60 backdrop-blur-sm px-1.5 py-0.5 rounded text-[8px] font-bold text-white flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-red-500"></span> Live
+</div>
+</div>
+<div class="flex items-center gap-2 -mt-3.5 z-10">
+<button aria-label="Microphone serre" class="w-7 h-7 rounded-full bg-white shadow-md flex items-center justify-center text-theme-textPrimary hover:bg-slate-50 transition" type="button">
+<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24"><path d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+</button>
+</div>
+</div>
+<!-- Lock Pin Anchor Under PIP -->
+<div class="w-6 h-6 rounded-full bg-theme-textPrimary text-white flex items-center justify-center shadow-md mt-1">
+<svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2.5" viewbox="0 0 24 24"><path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+</div>
+</div>
+<!-- Greenhouse diagram redrawn from the supplied visual reference -->
+<svg aria-label="Serre vitrée avec bac central et capteurs" class="w-full max-w-[570px] h-auto drop-shadow-xl select-none" role="img" viewbox="0 0 680 440" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<linearGradient id="new-glass-left" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#FFFFFF" stop-opacity=".72"/><stop offset="1" stop-color="#A7B0D7" stop-opacity=".20"/></linearGradient>
+<linearGradient id="new-glass-right" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#FFFFFF" stop-opacity=".64"/><stop offset="1" stop-color="#8793C5" stop-opacity=".18"/></linearGradient>
+<linearGradient id="new-soil" x1="0" x2="1"><stop stop-color="#4B4548"/><stop offset="1" stop-color="#302E35"/></linearGradient>
+<filter id="new-shadow" x="-20%" y="-30%" width="140%" height="180%"><feGaussianBlur stdDeviation="12"/></filter>
+</defs>
+<ellipse cx="340" cy="356" rx="275" ry="64" fill="#6F7898" fill-opacity=".22" filter="url(#new-shadow)"/>
+<!-- Foundation -->
+<polygon points="76,278 340,146 604,278 340,410" fill="#E8EBF5" stroke="#75809F" stroke-width="3"/>
+<polygon points="76,278 340,410 340,424 76,292" fill="#A7AFC8"/>
+<polygon points="340,410 604,278 604,292 340,424" fill="#8C96B5"/>
+<!-- Cultivation bed -->
+<polygon points="151,293 340,198 529,293 340,388" fill="#F7F8FC" stroke="#FFFFFF" stroke-width="5"/>
+<polygon points="164,293 340,205 516,293 340,380" fill="url(#new-soil)" stroke="#73788E" stroke-width="2"/>
+<polygon points="151,293 340,388 340,399 151,305" fill="#626A82"/>
+<polygon points="340,388 529,293 529,305 340,399" fill="#747D98"/>
+<!-- Sensor cable -->
+<path d="M190 292 340 367 491 292 340 217Z" fill="none" stroke="#98A4FF" stroke-dasharray="5 6" stroke-width="2.5"/>
+<g fill="#EEF1FF" stroke="#6978EC" stroke-width="2"><circle cx="220" cy="307" r="4"/><circle cx="300" cy="347" r="4"/><circle cx="384" cy="345" r="4"/><circle cx="463" cy="306" r="4"/></g>
+<!-- Lentil rows -->
+<g stroke="#70788D" stroke-linecap="round" stroke-width="2"><path d="M224 307v-50m0 18-18-12m18 24 20-15"/><path d="M282 335v-57m0 19-18-14m18 29 20-17"/><path d="M340 355v-64m0 21-20-15m20 32 21-18"/><path d="M400 332v-60m0 19-18-14m18 30 20-18"/><path d="M458 302v-50m0 18-17-12m17 25 18-16"/></g>
+<g fill="#80C9A9"><ellipse cx="207" cy="262" rx="13" ry="9"/><ellipse cx="226" cy="255" rx="14" ry="10"/><ellipse cx="245" cy="271" rx="12" ry="8"/><ellipse cx="267" cy="281" rx="13" ry="9"/><ellipse cx="284" cy="271" rx="15" ry="10"/><ellipse cx="304" cy="294" rx="12" ry="8"/><ellipse cx="321" cy="295" rx="13" ry="9"/><ellipse cx="340" cy="285" rx="16" ry="10"/><ellipse cx="360" cy="309" rx="13" ry="9"/><ellipse cx="381" cy="278" rx="13" ry="9"/><ellipse cx="400" cy="267" rx="15" ry="10"/><ellipse cx="419" cy="288" rx="12" ry="8"/><ellipse cx="439" cy="260" rx="13" ry="9"/><ellipse cx="458" cy="251" rx="14" ry="10"/><ellipse cx="476" cy="270" rx="12" ry="8"/></g>
+<g fill="#EB7375"><circle cx="276" cy="294" r="4"/><circle cx="294" cy="286" r="4"/><circle cx="391" cy="284" r="4"/><circle cx="449" cy="271" r="4"/></g>
+<!-- Glass shell, with a clean roof line and no protruding vent -->
+<polygon points="76,278 340,146 340,56 76,188" fill="url(#new-glass-left)" stroke="#64708E" stroke-width="2"/>
+<polygon points="340,146 604,278 604,188 340,56" fill="url(#new-glass-right)" stroke="#64708E" stroke-width="2"/>
+<polygon points="76,188 340,56 604,188 340,320" fill="#D9DEF2" fill-opacity=".12" stroke="#64708E" stroke-width="2"/>
+<!-- White frame -->
+<g fill="none" stroke="#FAFBFF" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"><path d="M76 278V188L340 56l264 132v90L340 410 76 278Z"/><path d="M76 188l264 132 264-132"/><path d="M176 238v90M504 238v90"/></g>
+<g fill="#DDE3F1" stroke="#56627E" stroke-width="2"><circle cx="76" cy="278" r="6"/><circle cx="340" cy="410" r="6"/><circle cx="604" cy="278" r="6"/><circle cx="340" cy="56" r="6"/></g>
+<!-- Soil probe and sensor marker -->
+<line x1="340" x2="340" y1="327" y2="369" stroke="#5068D8" stroke-width="3"/><circle cx="340" cy="327" r="7" fill="#FFFFFF" stroke="#6877F1" stroke-width="3"/><circle cx="340" cy="327" r="2" fill="#6877F1"/>
+</svg>
+<!-- Original Stitch SVG retained as an invisible fallback -->
+<svg class="hidden w-full max-w-[660px] h-auto drop-shadow-2xl select-none" fill="none" viewbox="0 0 680 440" xmlns="http://www.w3.org/2000/svg">
+<!-- Floor Shadow -->
+<polygon fill="#848BA8" fill-opacity="0.25" points="340,390 580,260 340,140 100,260"></polygon>
+<!-- Isometric Foundation Slab -->
+<polygon fill="#B4BACF" points="340,380 570,250 570,265 340,395"></polygon>
+<polygon fill="#979EB8" points="340,380 110,250 110,265 340,395"></polygon>
+<polygon fill="#EDF0FA" points="340,380 570,250 340,120 110,250" stroke="#D1D7EB" stroke-width="2"></polygon>
+<!-- Back Enclosure Walls (Lavender/purple transparent glass - OPEN INTERIOR, NO DIVIDER) -->
+<polygon fill="#7C74C2" fill-opacity="0.22" points="110,250 340,120 340,240 110,360" stroke="#685DB8" stroke-dasharray="2 4" stroke-width="2.5"></polygon>
+<polygon fill="#695CB7" fill-opacity="0.18" points="340,120 570,250 570,150 340,20" stroke="#584DA8" stroke-dasharray="2 4" stroke-width="2"></polygon>
+<!-- ============================================== -->
+<!-- GRAND BAC UNIQUE CENTRAL CONTINU DE 12m²        -->
+<!-- ============================================== -->
+<!-- Bac Unique - Ombre au sol -->
+<polygon fill="#636A84" fill-opacity="0.3" points="340,358 505,263 340,172 175,263"></polygon>
+<!-- Bac Unique - Paroi extérieure avant-gauche (Bois/Composite gris-anthracite chaud) -->
+<polygon fill="#5A6178" points="180,260 340,350 340,364 180,274"></polygon>
+<!-- Bac Unique - Paroi extérieure avant-droite -->
+<polygon fill="#777E97" points="340,350 500,260 500,274 340,364"></polygon>
+<!-- Bac Unique - Rebord supérieur du bac -->
+<polygon fill="#E3E6F2" points="340,350 500,260 340,174 180,260" stroke="#C4C9E0" stroke-width="2"></polygon>
+<!-- Terreau / Substrat fertile du Bac Unique continu -->
+<polygon fill="#3D3227" points="340,344 492,260 340,180 188,260" stroke="#524334" stroke-width="1.5"></polygon>
+<polygon fill="#2B231B" fill-opacity="0.5" points="340,344 492,260 340,265 188,260"></polygon>
+<!-- Système de goutte-à-goutte continu intégré sur toute la longueur du bac unique -->
+<path d="M 215 245 L 340 318 L 465 245" fill="none" stroke="#8E94F2" stroke-dasharray="3 3" stroke-width="1.5"></path>
+<path d="M 255 222 L 340 272 L 425 222" fill="none" stroke="#8E94F2" stroke-dasharray="3 3" stroke-width="1.2"></path>
+<!-- Micro goutteurs actifs (points bleutés) -->
+<circle cx="270" cy="277" fill="#60A5FA" r="1.5"></circle>
+<circle cx="310" cy="301" fill="#60A5FA" r="1.5"></circle>
+<circle cx="340" cy="318" fill="#60A5FA" r="1.5"></circle>
+<circle cx="380" cy="295" fill="#60A5FA" r="1.5"></circle>
+<circle cx="420" cy="271" fill="#60A5FA" r="1.5"></circle>
+<!-- ============================================== -->
+<!-- VEGETATION HARMONIEUSE DU BAC UNIQUE (12m²)    -->
+<!-- ============================================== -->
+<!-- Groupe 1 : plants avant-gauche (aromatiques / basilic) -->
+<circle cx="225" cy="254" fill="#34D399" r="6.5"></circle>
+<circle cx="232" cy="250" fill="#10B981" r="5.5"></circle>
+<circle cx="220" cy="250" fill="#059669" r="4.5"></circle>
+<circle cx="255" cy="272" fill="#34D399" r="7.5"></circle>
+<circle cx="264" cy="268" fill="#10B981" r="6"></circle>
+<circle cx="248" cy="267" fill="#059669" r="5.5"></circle>
+<!-- Groupe 2 : pieds de tomates & tuteurs centre-gauche -->
+<line stroke="#7C86DF" stroke-linecap="round" stroke-width="1.8" x1="290" x2="290" y1="285" y2="235"></line>
+<circle cx="290" cy="255" fill="#10B981" r="8"></circle>
+<circle cx="295" cy="245" fill="#34D399" r="7"></circle>
+<circle cx="284" cy="250" fill="#059669" r="6.5"></circle>
+<circle cx="294" cy="260" fill="#EF4444" r="2.8"></circle>
+<circle cx="286" cy="256" fill="#EF4444" r="2.5"></circle>
+<!-- Groupe 3 : Centre du bac unique (salades & jeunes pousses) -->
+<circle cx="340" cy="290" fill="#4ADE80" r="9"></circle>
+<circle cx="332" cy="285" fill="#22C55E" r="7.5"></circle>
+<circle cx="348" cy="285" fill="#16A34A" r="7"></circle>
+<circle cx="340" cy="280" fill="#86EFAC" r="5.5"></circle>
+<!-- Groupe 4 : Pieds tuteurés centre-droit -->
+<line stroke="#7C86DF" stroke-linecap="round" stroke-width="1.8" x1="390" x2="390" y1="260" y2="210"></line>
+<circle cx="390" cy="230" fill="#10B981" r="8.5"></circle>
+<circle cx="397" cy="223" fill="#34D399" r="7"></circle>
+<circle cx="383" cy="226" fill="#059669" r="6.5"></circle>
+<circle cx="395" cy="236" fill="#EF4444" r="2.8"></circle>
+<!-- Groupe 5 : plants fond droit (poivrons & piments) -->
+<circle cx="435" cy="242" fill="#34D399" r="7"></circle>
+<circle cx="442" cy="238" fill="#10B981" r="6"></circle>
+<circle cx="430" cy="236" fill="#059669" r="5"></circle>
+<circle cx="335" cy="225" fill="#4ADE80" r="6.5"></circle>
+<circle cx="345" cy="222" fill="#22C55E" r="5.5"></circle>
+<!-- Sonde Sol Pivot Centrale (-15 cm) dans le bac unique -->
+<line stroke="#3B82F6" stroke-linecap="round" stroke-width="2.5" x1="320" x2="320" y1="285" y2="310"></line>
+<circle cx="320" cy="283" fill="#2563EB" r="4" stroke="#FFFFFF" stroke-width="1.5"></circle>
+<line stroke="#60A5FA" stroke-linecap="round" stroke-width="1" x1="320" x2="320" y1="270" y2="280"></line>
+<!-- ============================================== -->
+<!-- STRUCTURE VERRIÈRE & ARMATURES ISOMÉTRIQUES     -->
+<!-- ============================================== -->
+<!-- Piliers d'angle principaux -->
+<line stroke="#5F52AC" stroke-linecap="round" stroke-width="4" x1="110" x2="110" y1="250" y2="150"></line>
+<line stroke="#5F52AC" stroke-linecap="round" stroke-width="4" x1="570" x2="570" y1="250" y2="150"></line>
+<line stroke="#5F52AC" stroke-linecap="round" stroke-width="4" x1="340" x2="340" y1="380" y2="280"></line>
+<!-- Faîtage et toiture ouverte sans cloison intérieure -->
+<line stroke="#5246A1" stroke-width="4" x1="340" x2="340" y1="70" y2="120"></line>
+<polygon fill="#A49DE3" fill-opacity="0.22" points="340,70 110,150 340,120 570,150" stroke="#5F52AC" stroke-width="3.5"></polygon>
+<!-- Panneaux vitrés avant transparents violet-doux -->
+<polygon fill="#695CB7" fill-opacity="0.18" points="340,380 570,250 570,150 340,280" stroke="#584DA8" stroke-width="3"></polygon>
+<polygon fill="#7C70C6" fill-opacity="0.20" points="340,280 570,150 480,105 340,180" stroke="#584DA8" stroke-width="2"></polygon>
+<polygon fill="#695CB7" fill-opacity="0.15" points="340,380 110,250 110,150 340,280" stroke="#584DA8" stroke-width="2.5"></polygon>
+</svg>
+<!-- PASTILLE 1 : Ouvrant Toit (Haut Droite) -->
+<div class="hidden absolute top-12 right-14 z-20 items-center gap-2 glass-pill px-3 py-1.5 rounded-2xl shadow-soft-card border border-white">
+<span class="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse"></span>
+<div class="flex flex-col">
+<span class="text-[10px] text-theme-textSecondary font-semibold leading-tight">Luminosité</span>
+<span class="text-xs font-bold text-theme-textPrimary">18 450 lux</span>
+</div>
+<div class="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 ml-1">
+<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24"><path d="M14 5l7 7m0 0l-7 7m7-7H3" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+</div>
+</div>
+<!-- PASTILLE 2 : Humidité Sol Pivot du BAC UNIQUE avec lien direct vers profil (Centre/Droite) -->
+<a class="hidden absolute bottom-28 right-8 z-20 items-center gap-2.5 glass-pill px-3.5 py-2 rounded-2xl shadow-float-badge border border-theme-accent/40 hover:border-theme-accent hover:scale-105 transition group" href="humidity.html" title="Cliquer pour voir le détail hydrique du bac unique">
+<div class="w-8 h-8 rounded-xl bg-blue-500/10 border border-blue-200 flex items-center justify-center text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition">
+<svg class="w-4 h-4" fill="currentColor" viewbox="0 0 20 20">
+<path clip-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" fill-rule="evenodd"></path>
+</svg>
+</div>
+<div class="flex flex-col">
+<div class="flex items-center gap-1.5">
+<span class="text-[10px] text-theme-textSecondary font-bold tracking-tight">BAC UNIQUE (12m²)</span>
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+</div>
+<span class="text-xs font-extrabold text-theme-textPrimary">Humidité sol : 68.4% <span class="text-[10px] font-semibold text-emerald-600">(Optimal)</span></span>
+<span class="text-[10px] text-theme-accent font-semibold group-hover:underline flex items-center gap-1 mt-0.5">
+  Voir profil hydrique
+  <svg class="w-3 h-3 transform group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" stroke-width="2.5" viewbox="0 0 24 24"><path d="M9 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+</span>
+</div>
+</a>
+<!-- PASTILLE 3 : Sonde Sol Pivot & Brumisateurs (Bas Gauche) -->
+<div class="hidden absolute bottom-16 left-12 z-20 items-center gap-2.5 glass-pill px-3 py-1.5 rounded-2xl shadow-soft-card border border-white">
+<div class="w-7 h-7 rounded-xl bg-purple-100/80 flex items-center justify-center text-purple-600">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24">
+<path d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</div>
+<div class="flex flex-col">
+<span class="text-[10px] text-theme-textSecondary font-semibold leading-tight">Sonde Sol Pivot (-15cm)</span>
+<span class="text-xs font-bold text-theme-textPrimary">68.4% • Bac unique central</span>
+</div>
+</div>
+<!-- Floating Ambient Info Pin (Middle) -->
+<div class="hidden absolute top-1/2 right-1/3 transform -translate-y-6 z-20">
+<div class="w-8 h-8 rounded-full bg-white shadow-float-badge border-2 border-theme-accent flex items-center justify-center text-theme-accent animate-bounce">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewbox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+</div>
+</div>
+</div>
+<!-- Environmental Quick Summary Strip inside greenhouse visual (Strictement aligné avec écran humidité) -->
+<div class="relative z-20 flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-300/40 text-xs font-semibold text-theme-textSecondary" data-purpose="greenhouse-metrics-footer">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+<span>Humidité de l’air : <strong class="text-theme-textPrimary font-bold">71%</strong></span>
+</div>
+<div class="flex items-center gap-2">
+<span>Réservoir d’eau : <strong class="text-theme-textPrimary font-bold">82% · 1 420 L</strong></span>
+</div>
+<div class="flex items-center gap-2">
+<span>Température ambiante: <strong class="text-theme-textPrimary font-bold">24.2°C</strong></span>
+</div>
+<div class="flex items-center gap-2">
+<span>Humidité sol bac unique: <strong class="text-emerald-600 font-bold">68.4% (Optimal)</strong></span>
+</div>
+</div>
+</section>
+<!-- END: CenterGreenhouseVisualizer -->
+</div>
+<!-- BEGIN: BottomActuatorsBar -->
+<footer class="w-full bg-theme-card rounded-3xl p-4 sm:p-5 shadow-soft-card" data-purpose="bottom-actuators-bar">
+<div class="grid grid-cols-1 md:grid-cols-3 gap-5 divide-y md:divide-y-0 md:divide-x divide-slate-200/80">
+<!-- Actuator 1: Ouvrants & Toit de serre -->
+<div class="flex items-center justify-between pr-0 md:pr-4 pt-1 md:pt-0" data-purpose="actuator-roof-vents">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-2xl bg-white shadow-sm flex items-center justify-center text-theme-textPrimary">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24">
+<path d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</div>
+<div>
+<p class="text-sm font-bold text-theme-textPrimary">Humidité de l’air</p>
+<p class="text-xs text-theme-textSecondary font-medium">71% · Relevé à 10:42</p>
+</div>
+</div>
+<button aria-label="Verrouiller ouvrants" class="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center shadow hover:bg-slate-800 transition" type="button">
+<span class="w-2.5 h-2.5 rounded-full bg-white"></span>
+</button>
+</div>
+<!-- Actuator 2: Brumisateurs & Humidificateurs (Ambiance générale bac unique) -->
+<div class="flex items-center justify-between px-0 md:px-5 pt-3 md:pt-0" data-purpose="actuator-misting">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-2xl bg-white shadow-sm flex items-center justify-center text-theme-accent">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24">
+<path d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 00-9.78 2.096A4.001 4.001 0 003 15z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</div>
+<div>
+<p class="text-sm font-bold text-theme-textPrimary">Luminosité</p>
+<p class="text-xs text-theme-textSecondary font-medium">18 450 lux · Relevé à 10:42</p>
+</div>
+</div>
+<!-- Green Active Toggle -->
+<button aria-checked="true" class="w-12 h-6 bg-theme-greenSoft rounded-full p-1 flex items-center justify-end shadow-inner cursor-pointer" data-purpose="mist-toggle" role="switch" type="button">
+<span class="w-4 h-4 bg-white rounded-full shadow-md"></span>
+</button>
+</div>
+<!-- Actuator 3: Réserve d'eau & Sécurité (1420 L, 82%) -->
+<div class="flex items-center justify-between pl-0 md:pl-5 pt-3 md:pt-0" data-purpose="actuator-water-reserve">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-2xl bg-white shadow-sm flex items-center justify-center text-theme-textSecondary">
+<svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24">
+<path d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</div>
+<div>
+<p class="text-sm font-bold text-theme-textPrimary">Réservoir d'eau</p>
+<p class="text-xs text-emerald-600 font-bold">Niveau: 82% (1 420 L)</p>
+</div>
+</div>
+<!-- Active Safety Toggle -->
+<button aria-checked="true" class="w-12 h-6 bg-theme-greenSoft rounded-full p-1 flex items-center justify-end shadow-inner cursor-pointer" data-purpose="alarm-toggle" role="switch" type="button">
+<span class="w-4 h-4 bg-white rounded-full shadow-md"></span>
+</button>
+</div>
+</div>
+</footer>
+<!-- END: BottomActuatorsBar -->
+</main>
+<!-- END: MainDashboardContainer -->
+<!-- Script for lightweight interactions (toggles) -->
+<script data-purpose="interactive-toggles">
+    document.querySelectorAll('button[role="switch"]').forEach(toggle => {
+      toggle.addEventListener('click', () => {
+        const isChecked = toggle.getAttribute('aria-checked') === 'true';
+        toggle.setAttribute('aria-checked', (!isChecked).toString());
 
-  <section class="cards" id="cards">
-    <!-- remplies par dashboard.js -->
-  </section>
-
-  <section class="charts" id="charts">
-    <!-- remplies par dashboard.js -->
-  </section>
-
-  <footer>
-    <span id="last-update">En attente de données…</span>
-  </footer>
-
-  <script src="/static/dashboard.js"></script>
-</body>
-</html>
+        if (isChecked) {
+          toggle.classList.remove('bg-theme-greenSoft', 'justify-end');
+          toggle.classList.add('bg-slate-300', 'justify-start');
+        } else {
+          toggle.classList.remove('bg-slate-300', 'justify-start');
+          toggle.classList.add('bg-theme-greenSoft', 'justify-end');
+        }
+      });
+    });
+  </script>
+<script src="/static/dashboard.js" defer></script>
+</body></html>
