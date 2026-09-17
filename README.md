@@ -66,12 +66,13 @@ Un topic par capteur, sous le préfixe `lentia/sensors/` :
 
 Chaque message ne contient que la valeur JSON du capteur (pas d'objet), par
 exemple `21.3` sur `lentia/sensors/temperature`, ou `null` si le capteur
-n'est pas encore câblé :
+n'est pas encore câblé (voir [`pico/README.md`](pico/README.md) pour l'état
+actuel du câblage) :
 
 ```
 lentia/sensors/temperature   -> 21.3
 lentia/sensors/soil_humidity -> 45.2
-lentia/sensors/air_humidity  -> null
+lentia/sensors/air_humidity  -> 55.8
 ```
 
 L'API s'abonne au wildcard `lentia/sensors/+` et enregistre une ligne en base

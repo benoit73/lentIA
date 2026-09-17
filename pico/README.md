@@ -12,7 +12,6 @@ vérité si ça diverge un jour de ce fichier).
 | Humidité du sol              | 1             | `lentia/sensors/soil_humidity`       | câblé  |
 | Luminosité                   | 2             | `lentia/sensors/luminosity`          | câblé  |
 | *(libre)*                    | 3             | —                                     | libre  |
-| Humidité de l'air             | —             | `lentia/sensors/air_humidity`        | **pas câblé** (envoie `null`) |
 
 Bus SPI0 vers le MCP3004 :
 
@@ -23,9 +22,19 @@ Bus SPI0 vers le MCP3004 :
 | MISO   | GP4         |
 | CS     | GP5         |
 
-Le canal 3 du MCP3004 est libre — c'est le candidat naturel pour l'humidité
-de l'air une fois le capteur en main (adapter `lire_mcp3004(3)` +
-`readings["air_humidity"]` dans `main.py`).
+Le canal 3 du MCP3004 est libre pour un futur capteur analogique.
+
+## Capteur d'humidité de l'air (DHT22)
+
+| Signal | Broche Pico | Rôle                    |
+|--------|:-----------:|--------------------------|
+| DATA   | GP6         | Lecture humidité/température |
+
+Topic : `lentia/sensors/air_humidity`. Le DHT22 ne supporte pas plus d'une
+mesure toutes les ~2s (`DHT_MIN_INTERVAL_MS` dans `main.py`, qui garde la
+dernière valeur connue entre deux mesures plutôt que de sur-solliciter le
+capteur). Sa mesure de température n'est pas utilisée (on garde le LM35 sur
+le MCP3004 pour `temperature`).
 
 ## Capteur de niveau (HC-SR04)
 

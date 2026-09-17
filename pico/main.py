@@ -1,4 +1,5 @@
 from machine import Pin, SPI, time_pulse_us
+from dht import DHT22
 import network
 import time
 import ujson
@@ -124,6 +125,30 @@ def distance_vers_niveau(distance_cm):
     return max(0.0, min(100.0, niveau))
 
 
+# DHT22 (humidite de l'air) sur GP6.
+dht_sensor = DHT22(Pin(6))
+DHT_MIN_INTERVAL_MS = 2100  # le DHT22 ne supporte pas plus d'une mesure/~2s
+dht_derniere_lecture_ms = time.ticks_ms() - DHT_MIN_INTERVAL_MS
+dht_derniere_humidite = None
+
+
+def lire_dht22():
+    """Humidite de l'air (%). Respecte l'intervalle minimal du capteur en ne
+    mesurant pas plus souvent que DHT_MIN_INTERVAL_MS ; renvoie la derniere
+    valeur connue entre deux mesures, ou en cas d'erreur de lecture."""
+    global dht_derniere_lecture_ms, dht_derniere_humidite
+    maintenant = time.ticks_ms()
+    if time.ticks_diff(maintenant, dht_derniere_lecture_ms) < DHT_MIN_INTERVAL_MS:
+        return dht_derniere_humidite
+    dht_derniere_lecture_ms = maintenant
+    try:
+        dht_sensor.measure()
+        dht_derniere_humidite = dht_sensor.humidity()
+    except OSError as e:
+        print("Erreur DHT22:", e)
+    return dht_derniere_humidite
+
+
 connect_wifi()
 mqtt = connect_mqtt()
 
@@ -143,10 +168,13 @@ while True:
     distance = lire_distance_hcsr04()  # TRIG sur GP0, ECHO sur GP1
     niveau_eau = distance_vers_niveau(distance)
 
+    humidite_air = lire_dht22()  # DHT22 sur GP6
+
     print("Brut:", brut, "| Tension:", tension, "V | Temp:", temperature, "C",
           "|| Brut hum:", brut_hum, "| Humidite:", humidite, "%",
           "|| Brut lum:", brut_lum, "| Luminosite:", luminosite, "%",
-          "|| Distance:", distance, "cm | Niveau eau:", niveau_eau, "%")
+          "|| Distance:", distance, "cm | Niveau eau:", niveau_eau, "%",
+          "|| Humidite air:", humidite_air, "%")
 
     # Un topic par capteur (lentia/sensors/<capteur>), une valeur JSON par
     # message. None -> "null" pour les capteurs pas encore cables (l'API les
@@ -154,7 +182,7 @@ while True:
     readings = {
         "temperature": round(temperature, 1),
         "soil_humidity": round(humidite, 1),
-        "air_humidity": None,   # pas encore cable
+        "air_humidity": round(humidite_air, 1) if humidite_air is not None else None,
         "luminosity": round(luminosite, 1),
         "water_level": round(niveau_eau, 1) if niveau_eau is not None else None,
     }
