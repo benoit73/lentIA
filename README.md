@@ -10,10 +10,10 @@ Raspberry Pi, capteurs et réseau de neurones).
 | `mosquitto`         | Broker MQTT                                                           | 1883         |
 | `postgres`          | Base de données des relevés                                           | 5432         |
 | `api`               | Flask : s'abonne au MQTT, enregistre en base, expose l'API REST + WebSocket (protégées par OAuth) | 5000         |
-| `dashboard`         | Dashboard React (`web/`), servi par nginx qui relaie `/api` et `/ws` vers `api` | 3000         |
+| `dashboard`         | Dashboard React (`web/`), servi par nginx qui relaie `/api` et `/ws` vers `api` | 80           |
 | `mqtt-test-client`  | Publie des données aléatoires (à remplacer par le vrai Pico W)        | —            |
 
-> Le dashboard à ouvrir est **http://localhost:3000** (React). L'ancienne page
+> Le dashboard à ouvrir est **http://localhost** (React, port 80). L'ancienne page
 > statique servie par Flask sur `/` (port 5000) reste dans `api/templates` et
 > `api/static` mais n'est plus authentifiée : depuis que l'API exige un token
 > OAuth (voir plus bas), ses appels REST/WebSocket échouent (401). Elle est
@@ -24,10 +24,10 @@ Raspberry Pi, capteurs et réseau de neurones).
 | Module            | Rôle                                                                 |
 |--------------------|-----------------------------------------------------------------------|
 | `config.py`        | Configuration (variables d'environnement)                             |
-| `db.py`             | Accès Postgres : écriture des relevés, historique par capteur         |
+| `db.py`             | Accès Postgres : relevés, journal/état des actionneurs, règles d'automatisation |
 | `mqtt_ingest.py`    | Client MQTT interne : abonnement, persistance en base, diffusion temps réel |
 | `realtime.py`       | Pub/sub en mémoire entre `mqtt_ingest` et les routes WebSocket         |
-| `routes.py`         | Routes HTTP REST (santé, liste des capteurs, historique)              |
+| `routes.py`         | Routes HTTP REST (santé, capteurs, actionneurs, journal, automatisation) |
 | `ws.py`             | Routes WebSocket, une par capteur                                     |
 | `auth.py`           | Vérification des ID tokens Google (OAuth) : décorateur `require_auth` pour le REST, `verify_token` pour le WebSocket |
 | `automation.py`     | Thread de fond : évalue les règles d'automatisation toutes les ~30s   |
@@ -48,7 +48,7 @@ Raspberry Pi, capteurs et réseau de neurones).
 | `src/components/ActuatorPanel.tsx` | Tableau lumière/chauffage/arrosage/ventilation (juste les interrupteurs) |
 | `src/components/JournalPreview.tsx` | Aperçu des dernières actions dans la page Contrôle, lien vers le journal complet |
 | `src/components/CameraPanel.tsx`   | Emplacement retour caméra (placeholder tant qu'il n'y a pas de caméra) |
-| `src/hooks/`                    | `useSensorHistory` (fetch REST), `useSensorRealtime` (WebSocket) |
+| `src/hooks/`                    | `useSensorHistory`/`useSensorRealtime`/`useLiveSeries` (capteurs), `usePolling` (actionneurs/journal) |
 | `src/api.ts`                    | Client API (fetch + URL WebSocket), toujours en chemins relatifs |
 | `nginx.conf`                    | Sert le build statique + relaie `/api` et `/ws` vers `api:5000`  |
 
@@ -138,6 +138,13 @@ réel). Il n'y a pour l'instant **aucun retour physique** : l'état affiché
 dans le dashboard est celui de la dernière commande envoyée, pas une
 confirmation matérielle.
 
+Contrairement aux capteurs, les actionneurs et le journal n'ont pas de canal
+WebSocket dédié : `ActuatorPanel`, `JournalPreview` et `JournalPage`
+repassent chacun toutes les `ACTUATOR_POLL_MS` (`web/src/config.ts`, 5
+secondes par défaut — `usePolling`) pour refléter les actions faites
+ailleurs (un autre onglet/appareil, ou une règle d'automatisation qui se
+déclenche en tâche de fond).
+
 ## Automatisation
 
 La page **Automatisation** du dashboard configure des règles évaluées côté
@@ -185,7 +192,7 @@ données des capteurs.
 2. **Créer des identifiants** → **ID client OAuth** → type d'application
    **Application Web**.
 3. Dans **Origines JavaScript autorisées**, ajoute :
-   - `http://localhost:3000` (dashboard en local/Docker)
+   - `http://localhost` (dashboard en local/Docker, port 80)
    - l'URL de prod si tu déploies ailleurs
 4. Aucune **URI de redirection** n'est nécessaire (on utilise Google
    Identity Services / Sign-In, pas le flux OAuth avec redirection).
@@ -238,7 +245,7 @@ ALLOWED_EMAILS=stroskanisation@gmail.com
 docker compose up --build
 ```
 
-Puis ouvrir : **http://localhost:3000**
+Puis ouvrir : **http://localhost**
 
 - Historique : chargé depuis Postgres, un fetch par capteur vers
   `/api/sensors/<capteur>/history`.
@@ -361,7 +368,7 @@ curl -H "Authorization: Bearer $ID_TOKEN" http://localhost:5000/api/actuators
 ```
 
 ```json
-["light", "heating", "watering"]
+["light", "heating", "watering", "ventilation"]
 ```
 
 ### `GET /api/actuators/state`
@@ -375,9 +382,10 @@ curl -H "Authorization: Bearer $ID_TOKEN" http://localhost:5000/api/actuators/st
 
 ```json
 {
-  "light":    { "state": true,  "updated_at": "2026-09-17T09:40:13.123456+00:00" },
-  "heating":  { "state": false, "updated_at": null },
-  "watering": { "state": false, "updated_at": null }
+  "light":       { "state": true,  "updated_at": "2026-09-17T09:40:13.123456+00:00" },
+  "heating":     { "state": false, "updated_at": null },
+  "watering":    { "state": false, "updated_at": null },
+  "ventilation": { "state": false, "updated_at": null }
 }
 ```
 
@@ -385,9 +393,9 @@ curl -H "Authorization: Bearer $ID_TOKEN" http://localhost:5000/api/actuators/st
 
 Envoie une commande : enregistre l'événement en base (avec l'email de
 l'utilisateur connecté, `source: "manual"`) puis publie sur
-`lentia/actuators/<actionneur>/set`. Toutes les commandes sont pour l'instant
-manuelles — le champ `source` existe déjà côté modèle pour une future
-automatisation (arrosage programmé, thermostat...), pas encore branchée.
+`lentia/actuators/<actionneur>/set`. Cette route est toujours `source: "manual"` — les commandes automatiques
+(voir section Automatisation ci-dessous) passent par `api/automation.py`,
+jamais par cette route.
 
 ```bash
 curl -X POST -H "Authorization: Bearer $ID_TOKEN" -H "Content-Type: application/json" \
@@ -481,7 +489,7 @@ directement sur les topics `lentia/sensors/<capteur>`, sur
 Rien d'autre à changer : l'API et le dashboard fonctionnent déjà avec
 n'importe quelle source qui respecte ce format.
 
-Pour les actionneurs (lumière, chauffage, arrosage) : câble les relais sur
+Pour les actionneurs (lumière, chauffage, arrosage, ventilation) : câble les relais sur
 les broches définies dans `ACTUATOR_PINS` (`pico/main.py`, à adapter à ton
 montage), rien d'autre à changer côté logiciel — le Pico écoute déjà
 `lentia/actuators/+/set`.
