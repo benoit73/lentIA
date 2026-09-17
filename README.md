@@ -483,6 +483,8 @@ websocat "ws://localhost:5000/ws/sensors/soil_humidity?token=$ID_TOKEN"
 
 ## Où brancher le vrai matériel
 
+Détail des broches (capteurs et actionneurs) : [`pico/README.md`](pico/README.md).
+
 Remplace (ou coupe) le service `mqtt-test-client` et fais publier ton Pico W
 directement sur les topics `lentia/sensors/<capteur>`, sur
 `<ip-du-serveur>:1883`, avec le même format (une valeur JSON par message).
