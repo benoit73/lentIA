@@ -57,7 +57,7 @@ services:
     depends_on:
       - api
     ports:
-      - "3000:80"   # Dashboard React (nginx relaie /api et /ws vers l'API)
+      - "80:80"   # Dashboard React (nginx relaie /api et /ws vers l'API)
     restart: unless-stopped
 
 volumes:
