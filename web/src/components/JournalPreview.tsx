@@ -1,15 +1,16 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { fetchActuatorEvents, type ActuatorEvent } from "../api";
 import { useAuth } from "../auth/AuthContext";
-import { ACTUATORS } from "../config";
+import { ACTUATOR_POLL_MS, ACTUATORS } from "../config";
 import { formatDateTime } from "../format";
+import { usePolling } from "../hooks/usePolling";
 
 export function JournalPreview() {
   const { token } = useAuth();
   const [events, setEvents] = useState<ActuatorEvent[]>([]);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     if (!token) return;
     fetchActuatorEvents(token, { limit: 5 })
       .then(setEvents)
@@ -17,6 +18,14 @@ export function JournalPreview() {
         // La page Journal complète affichera l'erreur ; ici on reste discret.
       });
   }, [token]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  // Pas de canal temps réel pour le journal : on repasse régulièrement pour
+  // voir apparaître les actions manuelles ou automatiques faites entre-temps.
+  usePolling(load, ACTUATOR_POLL_MS);
 
   return (
     <div className="bg-theme-card rounded-3xl p-5 shadow-soft-card lg:col-span-2">

@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchActuatorEvents, type ActuatorEvent } from "../api";
 import { useAuth } from "../auth/AuthContext";
 import { PresetKey, presetToRange, RangePicker } from "../components/RangePicker";
 import { TopBar } from "../components/TopBar";
-import { ACTUATORS } from "../config";
+import { ACTUATOR_POLL_MS, ACTUATORS } from "../config";
 import { formatDateTime, formatDuration } from "../format";
+import { usePolling } from "../hooks/usePolling";
 
 export function JournalPage() {
   const { token } = useAuth();
@@ -19,21 +20,34 @@ export function JournalPage() {
   const [error, setError] = useState<string | null>(null);
 
   const range = useMemo(() => presetToRange(preset, customStart, customEnd), [preset, customStart, customEnd]);
+  // Sur un préréglage relatif (1h/24h/7j/30j), `range.end` est figé au moment
+  // choisi : on l'ignore pour ne pas exclure les actions faites depuis, sinon
+  // le polling ne les ferait jamais apparaître. En "Personnalisé", la plage
+  // est volontairement figée dans le passé, on la respecte telle quelle.
+  const live = preset !== "custom";
 
-  useEffect(() => {
+  const load = useCallback(() => {
     if (!token) return;
-    setLoading(true);
     setError(null);
     fetchActuatorEvents(token, {
       actuator: actuatorFilter === "all" ? undefined : actuatorFilter,
       start: range.start,
-      end: range.end,
+      end: live ? undefined : range.end,
       limit: 200,
     })
       .then(setEvents)
       .catch(() => setError("Impossible de charger le journal."))
       .finally(() => setLoading(false));
-  }, [token, actuatorFilter, range.start, range.end]);
+  }, [token, actuatorFilter, range.start, range.end, live]);
+
+  useEffect(() => {
+    setLoading(true);
+    load();
+  }, [load]);
+
+  // Pas de canal temps réel pour le journal : on repasse régulièrement pour
+  // voir apparaître les actions manuelles ou automatiques faites entre-temps.
+  usePolling(load, ACTUATOR_POLL_MS);
 
   return (
     <div className="min-h-screen p-4 sm:p-6 lg:p-8 pb-20">

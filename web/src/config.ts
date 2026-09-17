@@ -5,6 +5,11 @@ export const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 // courbe plutôt qu'une ligne continue qui laisserait croire à des données.
 export const SENSOR_STALE_MS = 15_000;
 
+// Pas de canal temps réel pour les actionneurs/le journal (contrairement aux
+// capteurs) : on rafraîchit à intervalle régulier pour refléter les actions
+// manuelles faites ailleurs et les changements de l'automatisation.
+export const ACTUATOR_POLL_MS = 5_000;
+
 export interface SensorMeta {
   key: string;
   label: string;

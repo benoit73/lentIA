@@ -2,8 +2,9 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiError, fetchActuatorStates, toggleActuator, type ActuatorState } from "../api";
 import { useAuth } from "../auth/AuthContext";
-import { ACTUATORS } from "../config";
+import { ACTUATOR_POLL_MS, ACTUATORS } from "../config";
 import { formatDateTime } from "../format";
+import { usePolling } from "../hooks/usePolling";
 import { ToggleSwitch } from "./ToggleSwitch";
 
 export function ActuatorPanel() {
@@ -24,6 +25,11 @@ export function ActuatorPanel() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Rattrape les changements faits ailleurs (une règle d'automatisation qui
+  // se déclenche, un toggle depuis un autre onglet/appareil) sans qu'il n'y
+  // ait de canal temps réel dédié aux actionneurs.
+  usePolling(load, ACTUATOR_POLL_MS);
 
   async function handleToggle(key: string, next: boolean) {
     if (!token) return;
