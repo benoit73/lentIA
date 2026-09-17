@@ -9,7 +9,7 @@ from umqtt.simple import MQTTClient
 WIFI_SSID = "LentIA"
 WIFI_PASSWORD = "Admin74!"
 
-MQTT_BROKER = "192.168.0.103"      # IP du broker MQTT
+MQTT_BROKER = "98.66.161.191"      # IP du broker MQTT (VM Azure)
 MQTT_PORT = 1883
 MQTT_CLIENT_ID = "pico_terrarium"
 MQTT_USER = None                   # None si le broker n'a pas d'authentification
