@@ -6,7 +6,7 @@ import { SensorChart } from "../components/SensorChart";
 import { PresetKey, presetToRange, RangePicker } from "../components/RangePicker";
 import { TopBar } from "../components/TopBar";
 import { sensorByKey } from "../config";
-import { useSensorHistory } from "../hooks/useSensorHistory";
+import { useLiveSeries } from "../hooks/useLiveSeries";
 import { useSensorRealtime } from "../hooks/useSensorRealtime";
 
 export function SensorDetail() {
@@ -19,8 +19,16 @@ export function SensorDetail() {
 
   const { token } = useAuth();
   const range = useMemo(() => presetToRange(preset, customStart, customEnd), [preset, customStart, customEnd]);
-  const { data, loading, error } = useSensorHistory(sensorKey ?? "", range);
-  const { value: live, online } = useSensorRealtime(sensorKey ?? "", token);
+  const live = preset !== "custom";
+  const { value: liveValue, online, receivedAt } = useSensorRealtime(sensorKey ?? "", token);
+  const { points, leftEdge, rightEdge, loading, error } = useLiveSeries(sensorKey ?? "", range, {
+    live,
+    liveValue,
+    receivedAt,
+  });
+
+  const lastRealValue = [...points].reverse().find((p) => p.value !== null)?.value ?? null;
+  const currentValue = liveValue ?? lastRealValue;
 
   if (!sensor) {
     return (
@@ -50,7 +58,7 @@ export function SensorDetail() {
               <span>
                 Valeur actuelle :{" "}
                 <strong className="text-theme-textPrimary">
-                  {live !== null ? `${live} ${sensor.unit}` : "—"}
+                  {currentValue !== null ? `${currentValue} ${sensor.unit}` : "—"}
                 </strong>
               </span>
               <LiveStatusDot online={online} />
@@ -71,7 +79,9 @@ export function SensorDetail() {
         <div className="mt-6">
           {loading && <p className="text-sm text-theme-textSecondary">Chargement…</p>}
           {error && <p className="text-sm text-red-600">{error}</p>}
-          {!loading && !error && <SensorChart data={data} color={sensor.color} unit={sensor.unit} />}
+          {!loading && !error && (
+            <SensorChart points={points} leftEdge={leftEdge} rightEdge={rightEdge} color={sensor.color} unit={sensor.unit} />
+          )}
         </div>
       </main>
     </div>

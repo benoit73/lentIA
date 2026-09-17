@@ -90,11 +90,21 @@ défaut) — que la WebSocket elle-même soit coupée ou juste silencieuse (Pico
 éteint, capteur débranché, sans que la connexion à l'API ne tombe). Le badge
 repasse à **En ligne** (vert) dès qu'un nouveau message arrive.
 
-Le même seuil sert à l'historique : `withGapBreaks` (`web/src/chartGaps.ts`)
-insère un point `null` entre deux relevés réels trop espacés dans le temps,
-pour que les courbes (`SensorChart`, mini-graphes des cartes) affichent un
-vrai trou visuel à cet endroit plutôt qu'une ligne continue qui laisserait
-croire à des données qui n'existent pas.
+Le même seuil sert aux courbes, qui sont **vivantes** et pas de simples
+instantanés REST : `useLiveSeries` (`web/src/hooks/useLiveSeries.ts`) greffe
+chaque nouvelle valeur WebSocket sur l'historique déjà chargé, et fait
+avancer un curseur « maintenant » (`rightEdge`, sur un axe X numérique en
+temps réel, pas catégoriel) toutes les secondes — même sans nouvelle donnée,
+pour qu'on voie le temps passer. `withGapBreaks` (`web/src/chartGaps.ts`)
+insère un point `null` entre deux relevés réels trop espacés, et un point de
+rupture est aussi ajouté juste après le dernier relevé dès que le silence
+dépasse le seuil : la ligne s'arrête net (pas de fausse continuité), reste
+blanche pendant que « maintenant » continue d'avancer, puis reprend avec un
+nouveau segment dès la reconnexion — laissant un vrai trou visuel entre les
+deux. Ce comportement live ne s'applique qu'aux préréglages relatifs (1h,
+24h, 7j, 30j) ; en préréglage **Personnalisé** (plage figée choisie par
+l'utilisateur), le graphe reste un instantané de cette plage, sans curseur
+« maintenant » ni valeurs temps réel ajoutées après coup.
 
 ## Actionneurs (lumière, chauffage, arrosage, ventilation)
 

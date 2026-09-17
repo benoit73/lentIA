@@ -1,15 +1,8 @@
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import type { HistoryPoint } from "../api";
-import { withGapBreaks } from "../chartGaps";
+import type { LiveChartPoint } from "../hooks/useLiveSeries";
 
-interface ChartPoint {
-  value: number | null;
-  created_at: string;
-  label: string;
-}
-
-function formatTick(iso: string) {
-  return new Date(iso).toLocaleString("fr-FR", {
+function formatTick(time: number) {
+  return new Date(time).toLocaleString("fr-FR", {
     day: "2-digit",
     month: "2-digit",
     hour: "2-digit",
@@ -17,12 +10,15 @@ function formatTick(iso: string) {
   });
 }
 
-export function SensorChart({ data, color, unit }: { data: HistoryPoint[]; color: string; unit: string }) {
-  const points: ChartPoint[] = withGapBreaks(data).map((d) => ({
-    ...d,
-    label: formatTick(d.created_at),
-  }));
+interface Props {
+  points: LiveChartPoint[];
+  leftEdge: number;
+  rightEdge: number;
+  color: string;
+  unit: string;
+}
 
+export function SensorChart({ points, leftEdge, rightEdge, color, unit }: Props) {
   const hasData = points.some((p) => p.value !== null);
 
   if (!hasData) {
@@ -38,16 +34,20 @@ export function SensorChart({ data, color, unit }: { data: HistoryPoint[]; color
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={points}>
           <CartesianGrid strokeDasharray="3 4" stroke="#DDE1EE" vertical={false} />
-          <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#8B90A5" }} minTickGap={40} />
-          <YAxis tick={{ fontSize: 11, fill: "#8B90A5" }} width={48} />
+          <XAxis
+            dataKey="time"
+            type="number"
+            domain={[leftEdge, rightEdge]}
+            tickFormatter={formatTick}
+            tick={{ fontSize: 11, fill: "#8B90A5" }}
+            minTickGap={40}
+          />
+          <YAxis tick={{ fontSize: 11, fill: "#8B90A5" }} width={48} domain={["auto", "auto"]} />
           <Tooltip
             formatter={(value: number | string | Array<number | string>) =>
               value === null || value === undefined ? ["—", "Valeur"] : [`${value} ${unit}`, "Valeur"]
             }
-            labelFormatter={(_label, payload) => {
-              const point = payload?.[0]?.payload as ChartPoint | undefined;
-              return point ? new Date(point.created_at).toLocaleString("fr-FR") : "";
-            }}
+            labelFormatter={(time: number) => new Date(time).toLocaleString("fr-FR")}
           />
           <Line
             type="monotone"

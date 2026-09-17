@@ -7,6 +7,9 @@ export interface SensorRealtime {
   /** false si aucun message reçu depuis SENSOR_STALE_MS (capteur hors ligne
    * ou WebSocket coupée), même si la connexion WebSocket est restée ouverte. */
   online: boolean;
+  /** Horodatage (epoch ms) du dernier message reçu — sert à greffer les
+   * valeurs temps réel sur les graphes (useLiveSeries). */
+  receivedAt: number | null;
 }
 
 /** Valeur temps réel d'un capteur, poussée par l'API via WebSocket, avec un
@@ -14,6 +17,7 @@ export interface SensorRealtime {
 export function useSensorRealtime(sensor: string, token: string | null): SensorRealtime {
   const [value, setValue] = useState<number | null>(null);
   const [online, setOnline] = useState(false);
+  const [receivedAt, setReceivedAt] = useState<number | null>(null);
   const lastMessageAt = useRef<number | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
 
@@ -28,9 +32,11 @@ export function useSensorRealtime(sensor: string, token: string | null): SensorR
       socketRef.current = socket;
 
       socket.addEventListener("message", (event) => {
-        lastMessageAt.current = Date.now();
+        const now = Date.now();
+        lastMessageAt.current = now;
         setValue(JSON.parse(event.data));
         setOnline(true);
+        setReceivedAt(now);
       });
 
       socket.addEventListener("close", () => {
@@ -60,5 +66,5 @@ export function useSensorRealtime(sensor: string, token: string | null): SensorR
     return () => clearInterval(interval);
   }, []);
 
-  return { value, online };
+  return { value, online, receivedAt };
 }

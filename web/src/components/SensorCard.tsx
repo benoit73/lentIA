@@ -1,10 +1,9 @@
 import { Link } from "react-router-dom";
-import { Area, AreaChart, ResponsiveContainer } from "recharts";
+import { Area, AreaChart, ResponsiveContainer, XAxis, YAxis } from "recharts";
 import type { HistoryRange } from "../api";
 import { useAuth } from "../auth/AuthContext";
-import { withGapBreaks } from "../chartGaps";
 import type { SensorMeta } from "../config";
-import { useSensorHistory } from "../hooks/useSensorHistory";
+import { useLiveSeries } from "../hooks/useLiveSeries";
 import { useSensorRealtime } from "../hooks/useSensorRealtime";
 import { LiveStatusDot } from "./LiveStatusDot";
 
@@ -14,14 +13,13 @@ function formatValue(value: number | null, unit: string) {
   return `${rounded} ${unit}`;
 }
 
-export function SensorCard({ sensor, range }: { sensor: SensorMeta; range: HistoryRange }) {
+export function SensorCard({ sensor, range, live }: { sensor: SensorMeta; range: HistoryRange; live: boolean }) {
   const { token } = useAuth();
-  const { value: live, online } = useSensorRealtime(sensor.key, token);
-  const { data } = useSensorHistory(sensor.key, range);
+  const { value: liveValue, online, receivedAt } = useSensorRealtime(sensor.key, token);
+  const { points, leftEdge, rightEdge } = useLiveSeries(sensor.key, range, { live, liveValue, receivedAt });
 
-  const latestHistoryValue = [...data].reverse().find((d) => d.value !== null)?.value ?? null;
-  const currentValue = live ?? latestHistoryValue;
-  const chartData = withGapBreaks(data).map((d) => ({ value: d.value }));
+  const lastRealValue = [...points].reverse().find((p) => p.value !== null)?.value ?? null;
+  const currentValue = liveValue ?? lastRealValue;
 
   return (
     <Link
@@ -42,13 +40,15 @@ export function SensorCard({ sensor, range }: { sensor: SensorMeta; range: Histo
       </div>
       <div className="h-16 mt-4">
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={chartData}>
+          <AreaChart data={points}>
             <defs>
               <linearGradient id={`grad-${sensor.key}`} x1="0" x2="0" y1="0" y2="1">
                 <stop offset="0%" stopColor={sensor.color} stopOpacity={0.35} />
                 <stop offset="100%" stopColor={sensor.color} stopOpacity={0} />
               </linearGradient>
             </defs>
+            <XAxis dataKey="time" type="number" domain={[leftEdge, rightEdge]} hide />
+            <YAxis hide domain={["auto", "auto"]} />
             <Area
               type="monotone"
               dataKey="value"

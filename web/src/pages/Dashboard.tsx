@@ -31,7 +31,7 @@ export function Dashboard() {
 
       <main className="mt-3 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-5">
         {SENSORS.map((sensor) => (
-          <SensorCard key={sensor.key} sensor={sensor} range={range} />
+          <SensorCard key={sensor.key} sensor={sensor} range={range} live={preset !== "custom"} />
         ))}
       </main>
     </div>
