@@ -30,43 +30,50 @@ def predict_germination_chance(temperature, humidite_sol, luminosite, humidite_a
     return float(max(0.0, min(100.0, prediction)))
 
 
-# Plages balayées pour la recommandation, calées sur le min/max observé
-# dans le dataset d'entraînement (`ia/dataset_germination_lentilles.csv`) :
-# rester dans ce que le modèle a vu à l'entraînement plutôt que d'extrapoler
-# au-delà, où une prédiction de réseau de neurones n'a pas de sens garanti.
-SENSOR_BOUNDS = {
-    "temperature": (12.0, 41.0),
-    "soil_humidity": (9.0, 100.0),
-    "luminosity": (0.0, 2150.0),
-    "air_humidity": (20.0, 92.0),
-}
 _GRID_POINTS = 121
+
+# En dessous de ce gain (en points de % de pousse), on n'affiche pas de
+# cible. Dans ce dataset, température et humidité du sol pèsent des dizaines
+# de points, tandis que luminosité et humidité de l'air oscillent de quelques
+# points sans vrai signal : ce seuil ne laisse passer que les leviers réels
+# plutôt que d'inventer une cible sur une courbe quasi plate.
+MIN_RECOMMENDATION_GAIN_PCT = 8.0
 
 
 def recommend_values(current: dict) -> dict:
-    """Pour chaque capteur, balaie sa plage plausible pour trouver la valeur
-    qui maximise la prédiction du modèle, les 3 autres capteurs restant
-    fixés à leur relevé actuel (`current`) — une recommandation locale
-    ("vise Y% d'humidité du sol dans les conditions actuelles"), pas une
-    optimisation jointe sur les 4 capteurs en même temps."""
+    """Pour chaque capteur, balaie la plage observée à l'entraînement pour
+    trouver la valeur qui maximise la prédiction, les autres capteurs restant
+    fixés à leur valeur actuelle (`current`, des moyennes — voir
+    `PREDICTION_WINDOW_MINUTES`). Recommandation locale ("vise Y% d'humidité
+    du sol dans les conditions actuelles"), pas une optimisation jointe.
+
+    Les bornes de balayage viennent du modèle lui-même : au-delà de ce qu'il
+    a vu à l'entraînement, un réseau de neurones extrapole sans garantie."""
     bundle = _load()
     model = bundle["model"]
-    recommendations = {}
+    sensors = bundle["sensors"]
+    bounds = bundle["bounds"]
 
-    for sensor, (low, high) in SENSOR_BOUNDS.items():
+    baseline_row = [float(current[sensor]) for sensor in sensors]
+    baseline = float(np.clip(model.predict([baseline_row]), 0, 100)[0])
+
+    recommendations = {}
+    for index, sensor in enumerate(sensors):
+        low, high = bounds[sensor]
         grid = np.linspace(low, high, _GRID_POINTS)
-        rows = []
-        for candidate in grid:
-            params = dict(current)
-            params[sensor] = float(candidate)
-            rows.append(
-                [params["temperature"], params["soil_humidity"], params["luminosity"], params["air_humidity"]]
-            )
+        rows = np.tile(baseline_row, (len(grid), 1))
+        rows[:, index] = grid
+
         predictions = np.clip(model.predict(rows), 0, 100)
         best_index = int(np.argmax(predictions))
+        gain = float(predictions[best_index]) - baseline
+        if gain < MIN_RECOMMENDATION_GAIN_PCT:
+            continue
+
         recommendations[sensor] = {
             "recommended_value": round(float(grid[best_index]), 1),
             "predicted_chance_pct": round(float(predictions[best_index]), 2),
+            "gain_pct": round(gain, 2),
         }
 
     return recommendations

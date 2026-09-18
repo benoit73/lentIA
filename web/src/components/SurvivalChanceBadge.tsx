@@ -51,7 +51,7 @@ export function SurvivalChanceBadge() {
   return (
     <div
       className={`rounded-full px-3 sm:px-4 py-1.5 flex items-center gap-2 text-xs font-bold shadow-sm whitespace-nowrap ${colorClasses(pct)}`}
-      title="Chances de survie prédites à partir des derniers relevés capteur"
+      title="Chances de pousse prédites à partir des moyennes capteur des dernières 24 h"
     >
       <span className="hidden sm:inline uppercase tracking-wide font-semibold opacity-80">Chances de survie</span>
       <span className="sm:hidden uppercase tracking-wide font-semibold opacity-80">Survie</span>

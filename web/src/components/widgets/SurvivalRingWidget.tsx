@@ -18,27 +18,28 @@ interface Advice {
   unit: string;
   current: number;
   target: number;
+  gain: number;
 }
 
-/** Les 2 capteurs les plus loin de leur cible IA : ce sont eux qui font
- * gagner le plus de points de survie si on les corrige. */
+/** Les 2 capteurs qui rapportent le plus de points de pousse si on les
+ * corrige. L'API ne renvoie déjà que les leviers réels : un capteur dont la
+ * courbe est plate (la luminosité, dans ce dataset) en est absent. */
 function topAdvice(recommendations: GerminationRecommendations | null): Advice[] {
   if (!recommendations) return [];
   return Object.entries(recommendations.recommendations)
     .map(([key, recommendation]) => {
       const meta = sensorByKey(key);
-      const current = recommendations.based_on[key];
       return {
         key,
         label: meta?.label ?? key,
         unit: meta?.unit ?? "",
-        current,
+        current: recommendations.based_on[key],
         target: recommendation.recommended_value,
-        gap: Math.abs(recommendation.recommended_value - current) / Math.max(Math.abs(current), 1),
+        gain: recommendation.gain_pct,
       };
     })
-    .filter((advice) => advice.gap > 0.05 && Number.isFinite(advice.current))
-    .sort((a, b) => b.gap - a.gap)
+    .filter((advice) => Number.isFinite(advice.current))
+    .sort((a, b) => b.gain - a.gain)
     .slice(0, 2);
 }
 
@@ -103,7 +104,9 @@ export function SurvivalRingWidget({ chancePct, recommendations, delayMs = 0 }: 
                   <span className="font-bold text-theme-textPrimary tabular-nums">
                     {item.target.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} {item.unit}
                   </span>{" "}
-                  (actuel {item.current.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} {item.unit})
+                  <span className="font-bold text-emerald-600 tabular-nums">+{Math.round(item.gain)} pts</span>
+                  <br />
+                  moy. 24 h : {item.current.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} {item.unit}
                 </p>
               </div>
             );

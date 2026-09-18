@@ -39,6 +39,12 @@ AUTOMATION_POLL_SECONDS = int(os.environ.get("AUTOMATION_POLL_SECONDS", "30"))
 # plus configurable par règle (simplifie l'UI : une seule fenêtre pour tous).
 AUTOMATION_AVERAGE_WINDOW_MINUTES = int(os.environ.get("AUTOMATION_AVERAGE_WINDOW_MINUTES", "10"))
 
+# Fenêtre (minutes) des moyennes envoyées au modèle de prédiction. Il est
+# entraîné sur des moyennes journalières (voir ia/train_model.py) : lui
+# passer un relevé instantané n'aurait pas de sens, la luminosité vaut 0 la
+# nuit alors que les chances de pousse du jour, elles, ne changent pas.
+PREDICTION_WINDOW_MINUTES = int(os.environ.get("PREDICTION_WINDOW_MINUTES", "1440"))
+
 # Authentification (Google Sign-In / OpenID Connect) pour le dashboard React.
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 # Liste blanche d'emails autorisés à se connecter (vide = n'importe quel

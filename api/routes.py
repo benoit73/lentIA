@@ -9,7 +9,7 @@ import db
 import mqtt_ingest
 import prediction
 from auth import require_auth
-from config import ACTUATOR_FIELDS, SENSOR_FIELDS
+from config import ACTUATOR_FIELDS, PREDICTION_WINDOW_MINUTES, SENSOR_FIELDS
 
 # Capteurs utilisés par le modèle de prédiction (voir ia/train_model.py),
 # dans l'ordre attendu par prediction.predict_germination_chance.
@@ -112,48 +112,59 @@ def toggle_actuator(actuator):
     return jsonify({"actuator": actuator, "on": state})
 
 
-def _fetch_latest_prediction_sensors():
-    """Dernier relevé de chaque capteur utilisé par le modèle de prédiction.
-    Retourne (valeurs, None) ou (None, réponse_erreur) si un capteur n'a
-    encore rien reçu."""
-    latest = {}
+def _fetch_prediction_inputs():
+    """Moyenne de chaque capteur du modèle sur `PREDICTION_WINDOW_MINUTES`.
+    Le modèle est entraîné sur des moyennes journalières (voir
+    `ia/train_model.py`) : lui passer un relevé instantané n'aurait pas de
+    sens — la luminosité tombe à 0 la nuit alors que les chances de pousse du
+    jour, elles, ne bougent pas. Retourne (valeurs, None), ou
+    (None, réponse_erreur) si un capteur n'a rien relevé sur la fenêtre."""
+    values = {}
     missing = []
     for sensor in PREDICTION_SENSORS:
-        reading = db.fetch_latest_sensor_value(sensor)
-        if reading is None:
+        average = db.fetch_sensor_average(sensor, PREDICTION_WINDOW_MINUTES)
+        if average is None:
             missing.append(sensor)
         else:
-            latest[sensor] = reading["value"]
+            values[sensor] = round(float(average), 2)
 
     if missing:
         return None, (jsonify({"error": f"pas encore de relevé pour : {', '.join(missing)}"}), 503)
-    return latest, None
+    return values, None
 
 
 @bp.route("/api/prediction/germination")
 @require_auth
 def germination_prediction():
-    latest, error = _fetch_latest_prediction_sensors()
+    values, error = _fetch_prediction_inputs()
     if error:
         return error
 
     chance_pct = prediction.predict_germination_chance(
-        temperature=latest["temperature"],
-        humidite_sol=latest["soil_humidity"],
-        luminosite=latest["luminosity"],
-        humidite_air=latest["air_humidity"],
+        temperature=values["temperature"],
+        humidite_sol=values["soil_humidity"],
+        luminosite=values["luminosity"],
+        humidite_air=values["air_humidity"],
     )
-    return jsonify({"chance_pct": round(chance_pct, 2), "based_on": latest})
+    return jsonify(
+        {"chance_pct": round(chance_pct, 2), "based_on": values, "window_minutes": PREDICTION_WINDOW_MINUTES}
+    )
 
 
 @bp.route("/api/prediction/recommendations")
 @require_auth
 def germination_recommendations():
-    latest, error = _fetch_latest_prediction_sensors()
+    values, error = _fetch_prediction_inputs()
     if error:
         return error
 
-    return jsonify({"based_on": latest, "recommendations": prediction.recommend_values(latest)})
+    return jsonify(
+        {
+            "based_on": values,
+            "window_minutes": PREDICTION_WINDOW_MINUTES,
+            "recommendations": prediction.recommend_values(values),
+        }
+    )
 
 
 def _is_number(value):

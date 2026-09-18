@@ -168,10 +168,16 @@ export async function fetchGerminationChance(token: string): Promise<Germination
 export interface SensorRecommendation {
   recommended_value: number;
   predicted_chance_pct: number;
+  /** Points de % de pousse gagnés en amenant ce capteur à la valeur visée. */
+  gain_pct: number;
 }
 
 export interface GerminationRecommendations {
+  /** Moyennes sur `window_minutes`, pas des relevés instantanés : le modèle
+   * est entraîné sur des moyennes journalières. */
   based_on: Record<string, number>;
+  window_minutes: number;
+  /** Un capteur sans levier réel est absent (voir MIN_RECOMMENDATION_GAIN_PCT). */
   recommendations: Record<string, SensorRecommendation>;
 }
 

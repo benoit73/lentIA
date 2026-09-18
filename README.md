@@ -248,8 +248,7 @@ curl -X PUT -H "Authorization: Bearer $ID_TOKEN" -H "Content-Type: application/j
 bacs suivis heure par heure sur 8 jours : température, humidité du sol,
 luminosité, humidité de l'air, et le `chances_pousse_pct` observé) et le
 script `train_model.py` qui entraîne un réseau de neurones (scikit-learn
-`MLPRegressor`, 2 couches cachées 32/16, normalisation intégrée) à prédire
-`chances_pousse_pct` à partir des 4 relevés capteur.
+`MLPRegressor`, normalisation intégrée) à prédire `chances_pousse_pct`.
 
 ```bash
 cd ia
@@ -257,53 +256,84 @@ pip install -r requirements.txt
 python train_model.py
 ```
 
-Le split train/test se fait **par bac** (pas par ligne) : les relevés d'un
-même bac sont très corrélés (même trajectoire heure par heure), un split
-aléatoire ligne par ligne ferait fuiter le même bac dans train et test et
+**Granularité : une observation = un bac-jour, pas une ligne.** Le CSV
+compte 4800 lignes horaires, mais `chances_pousse_pct` est constant sur les
+24 heures d'une même journée : il n'y a donc que 25 × 8 = **200 vraies
+observations**. Entraîner ligne par ligne duplique 24 fois chaque étiquette
+en la mariant à des valeurs instantanées sans rapport avec elle — la
+luminosité vaut 0 la nuit et ~1100 lux à midi pour la *même* cible
+(corrélation +0.008, cible moyenne 41.07 sous 10 lux contre 41.13 au-dessus
+de 500 lux). Le modèle n'y voyait que du bruit et finissait par recommander
+« 0 lux » et « 90 % d'humidité de l'air », deux artefacts. Le script agrège
+donc chaque journée en moyennes avant d'entraîner.
+
+Le split train/test se fait **par bac** : les 8 jours d'un même bac
+partagent la même trajectoire, les séparer entre train et test
 surestimerait la performance. Le script affiche la MAE/R² sur des bacs
-jamais vus à l'entraînement (~8 points d'erreur moyenne, R² ~0.85), puis
-sauvegarde le modèle entraîné dans `api/model/germination_model.joblib` —
-c'est ce fichier (suivi par git) que l'API charge au démarrage
-(`api/prediction.py`), donc pas besoin de ré-entraîner pour déployer ;
-relance `train_model.py` et redéploie l'API seulement si tu changes le
-dataset ou le modèle.
+jamais vus (~5.6 points d'erreur, R² ~0.93) et un **balayage de contrôle**
+qui montre où le modèle place l'optimum de chaque capteur — pratique pour
+repérer tout de suite un optimum aberrant après un ré-entraînement :
+
+```
+         temperature_C : optimum    24.3 (amplitude  47.3 pts)
+      humidite_sol_pct : optimum    67.3 (amplitude  70.2 pts)
+        luminosite_lux : optimum   500.2 (amplitude  10.9 pts)
+      humidite_air_pct : optimum    57.4 (amplitude   8.5 pts)
+```
+
+Le réseau est volontairement petit (une couche de 12) et fortement
+régularisé (`alpha=10`) : sur 160 observations d'entraînement, un réseau
+plus gros part dans tous les sens là où le dataset est pauvre et le
+balayage y trouve de faux optimums. Le modèle est sauvegardé dans
+`api/model/germination_model.joblib` (avec les bornes de balayage observées)
+— c'est ce fichier, suivi par git, que l'API charge au démarrage, donc pas
+besoin de ré-entraîner pour déployer.
 
 `GET /api/prediction/germination` (authentifié comme le reste de l'API)
-prend automatiquement le **dernier relevé connu** de chaque capteur en base
-et renvoie la prédiction :
+prend la **moyenne de chaque capteur sur `PREDICTION_WINDOW_MINUTES`**
+(24 h par défaut) — pas le dernier relevé : le modèle est entraîné sur des
+moyennes journalières, lui passer les 0 lux de 3 h du matin n'aurait aucun
+sens.
 
 ```bash
 curl -H "Authorization: Bearer $ID_TOKEN" http://localhost:5000/api/prediction/germination
-# {"chance_pct": 68.54, "based_on": {"temperature": 25.0, "soil_humidity": 70.0, "luminosity": 400.0, "air_humidity": 55.0}}
+# {"chance_pct": 57.8, "window_minutes": 1440, "based_on": {"temperature": 25.34, "soil_humidity": 23.24, "luminosity": 52.53, "air_humidity": 54.72}}
 ```
 
-Renvoie `503` si un des 4 capteurs n'a encore jamais reçu de relevé.
+Renvoie `503` si un des 4 capteurs n'a rien relevé sur la fenêtre.
 
 Le dashboard affiche ce % dans un badge au centre du header (`SurvivalChanceBadge.tsx`), rafraîchi toutes les 10s, coloré selon la valeur (rouge < 33%, orange 33-66%, vert ≥ 66%) — visible sur les 4 pages du carrousel puisque le header est commun.
 
 ### Valeurs recommandées par capteur
 
 `GET /api/prediction/recommendations` va plus loin que la simple
-prédiction : pour chacun des 4 capteurs utilisés par le modèle, elle balaie
-sa plage plausible (bornée au min/max observé dans le dataset
-d'entraînement, pour ne pas extrapoler au-delà de ce que le modèle a
-appris) et cherche, via `model.predict` vectorisé sur toute la grille, la
-valeur qui **maximise** la prédiction — les 3 autres capteurs restant fixés
-à leur dernier relevé. C'est une recommandation locale par capteur ("vise
-Y% d'humidité du sol dans les conditions actuelles"), pas une optimisation
-jointe sur les 4 capteurs en même temps.
+prédiction : pour chaque capteur du modèle, elle balaie la plage observée à
+l'entraînement (bornes stockées dans le fichier du modèle, pour ne pas
+extrapoler au-delà de ce qu'il a appris) et cherche, via `model.predict`
+vectorisé sur toute la grille, la valeur qui **maximise** la prédiction —
+les autres capteurs restant à leur moyenne actuelle. C'est une
+recommandation locale par capteur ("vise Y % d'humidité du sol dans les
+conditions actuelles"), pas une optimisation jointe.
+
+**Un capteur n'apparaît que s'il constitue un vrai levier** : si l'amener à
+sa meilleure valeur rapporte moins de `MIN_RECOMMENDATION_GAIN_PCT` points
+(8 par défaut, `api/prediction.py`), aucune cible n'est renvoyée. Dans ce
+dataset, température et humidité du sol pèsent des dizaines de points, alors
+que luminosité et humidité de l'air oscillent de quelques points sans signal
+exploitable — ce seuil évite d'inventer une cible sur une courbe plate.
 
 ```bash
 curl -H "Authorization: Bearer $ID_TOKEN" http://localhost:5000/api/prediction/recommendations
-# {"based_on": {...}, "recommendations": {"soil_humidity": {"recommended_value": 59.8, "predicted_chance_pct": 70.2}, ...}}
+# {"window_minutes": 1440, "based_on": {...},
+#  "recommendations": {"soil_humidity": {"recommended_value": 68.1, "predicted_chance_pct": 86.5, "gain_pct": 53.4}}}
 ```
 
-Le dashboard affiche ces cibles sur chaque carte capteur concernée (badge
-« Cible IA : … », `SensorCard.tsx`), rafraîchies toutes les 30s
-(`Dashboard.tsx`) — plus espacé que le badge du header car le calcul est
-plus coûteux (balayage par capteur) et les cibles n'ont pas besoin d'être
-aussi réactives que la prédiction instantanée. Le réservoir d'eau n'entre
-pas dans le modèle et n'affiche donc pas de cible.
+Le dashboard exploite ces cibles à deux endroits : le widget « Chances de
+survie » liste les deux capteurs qui rapportent le plus (« vise 68,1 % +33
+pts »), et les cartes de la page Historique affichent un badge « Cible IA ».
+Rafraîchissement toutes les 30s — plus espacé que le badge du header, le
+balayage étant plus coûteux et les cibles beaucoup plus stables. Le
+réservoir d'eau n'entre pas dans le modèle et n'a donc jamais de cible.
 
 ## Authentification (OAuth)
 
@@ -651,3 +681,6 @@ montage), rien d'autre à changer côté logiciel — le Pico écoute déjà
 - `AUTOMATION_AVERAGE_WINDOW_MINUTES` (défaut 10) règle la fenêtre de moyenne
   utilisée par les règles à seuil — fixe pour toutes les règles, pas
   configurable individuellement.
+- `PREDICTION_WINDOW_MINUTES` (défaut 1440) est la fenêtre des moyennes
+  envoyées au modèle de prédiction. À ne pas raccourcir sans ré-entraîner :
+  le modèle apprend sur des moyennes journalières.
