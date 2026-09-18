@@ -5,6 +5,7 @@ import {
   saveAutomationRule,
   type AutomationRule,
   type ScheduleConfig,
+  type ScheduleThresholdConfig,
   type ThresholdConfig,
   type TimeRange,
 } from "../api";
@@ -13,14 +14,16 @@ import { FlexibleActuatorCard, type FlexibleForm } from "../components/automatio
 import { ScheduleRangesEditor } from "../components/automation/ScheduleRangesEditor";
 import { ToggleSwitch } from "../components/ToggleSwitch";
 
-interface ScheduleOnlyForm {
+interface LightForm {
   enabled: boolean;
   ranges: TimeRange[];
+  minLuminosity: string; // lux — s'allume si la luminosité mesurée ne dépasse pas ce seuil
 }
 
-const DEFAULT_LIGHT: ScheduleOnlyForm = {
+const DEFAULT_LIGHT: LightForm = {
   enabled: false,
   ranges: [{ start: "06:00", end: "22:00" }],
+  minLuminosity: "150",
 };
 
 const DEFAULT_WATERING: FlexibleForm = {
@@ -87,11 +90,22 @@ function isValidThresholdConfig(config: unknown): config is ThresholdConfig {
   );
 }
 
-function toScheduleOnlyForm(rule: AutomationRule | undefined, fallback: ScheduleOnlyForm): ScheduleOnlyForm {
-  if (!rule || rule.rule_type !== "schedule") return fallback;
-  const config = rule.config as ScheduleConfig;
-  if (!isValidRanges(config?.ranges)) return fallback;
-  return { enabled: rule.enabled, ranges: config.ranges };
+function isValidScheduleThresholdConfig(config: unknown): config is ScheduleThresholdConfig {
+  if (!config || typeof config !== "object") return false;
+  const c = config as ScheduleThresholdConfig;
+  return (
+    isValidRanges(c.ranges) &&
+    typeof c.sensor === "string" &&
+    (c.comparator === "above" || c.comparator === "below") &&
+    typeof c.threshold === "number"
+  );
+}
+
+function toLightForm(rule: AutomationRule | undefined, fallback: LightForm): LightForm {
+  if (!rule || rule.rule_type !== "schedule_threshold") return fallback;
+  if (!isValidScheduleThresholdConfig(rule.config)) return fallback;
+  const config = rule.config;
+  return { enabled: rule.enabled, ranges: config.ranges, minLuminosity: String(config.threshold) };
 }
 
 function toFlexibleForm(rule: AutomationRule | undefined, fallback: FlexibleForm): FlexibleForm {
@@ -121,7 +135,7 @@ function toFlexibleForm(rule: AutomationRule | undefined, fallback: FlexibleForm
 export function AutomationPage() {
   const { token, signOut } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [lightForm, setLightForm] = useState<ScheduleOnlyForm>(DEFAULT_LIGHT);
+  const [lightForm, setLightForm] = useState<LightForm>(DEFAULT_LIGHT);
   const [wateringForm, setWateringForm] = useState<FlexibleForm>(DEFAULT_WATERING);
   const [ventilationForm, setVentilationForm] = useState<FlexibleForm>(DEFAULT_VENTILATION);
   const [heatingForm, setHeatingForm] = useState<FlexibleForm>(DEFAULT_HEATING);
@@ -132,7 +146,7 @@ export function AutomationPage() {
     if (!token) return;
     fetchAutomationRules(token)
       .then((rules) => {
-        setLightForm(toScheduleOnlyForm(rules.light, DEFAULT_LIGHT));
+        setLightForm(toLightForm(rules.light, DEFAULT_LIGHT));
         setWateringForm(toFlexibleForm(rules.watering, DEFAULT_WATERING));
         setVentilationForm(toFlexibleForm(rules.ventilation, DEFAULT_VENTILATION));
         setHeatingForm(toFlexibleForm(rules.heating, DEFAULT_HEATING));
@@ -145,13 +159,19 @@ export function AutomationPage() {
 
   async function saveLight() {
     if (!token) return;
+    const threshold = Number(lightForm.minLuminosity);
+    if (!Number.isFinite(threshold) || threshold < 0) {
+      setMessages((m) => ({ ...m, light: "Seuil de luminosité invalide." }));
+      return;
+    }
+
     setSavingKey("light");
     setMessages((m) => ({ ...m, light: "" }));
     try {
       await saveAutomationRule(token, "light", {
         enabled: lightForm.enabled,
-        rule_type: "schedule",
-        config: { ranges: lightForm.ranges },
+        rule_type: "schedule_threshold",
+        config: { ranges: lightForm.ranges, sensor: "luminosity", comparator: "below", threshold },
       });
       setMessages((m) => ({ ...m, light: "Enregistré." }));
     } catch (err) {
@@ -236,13 +256,13 @@ export function AutomationPage() {
         <p className="mt-5 text-sm text-theme-textSecondary">Chargement…</p>
       ) : (
         <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-5">
-          {/* Lumière : plage(s) horaire(s) uniquement */}
+          {/* Lumière : plage(s) horaire(s) + seuil de luminosité (allumage d'appoint) */}
           <div className="bg-theme-card rounded-3xl p-5 shadow-soft-card flex flex-col">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h3 className="font-bold text-base text-theme-textPrimary">Lumière</h3>
                 <p className="text-xs text-theme-textSecondary mt-0.5">
-                  Allumer sur une ou plusieurs plages horaires (non chevauchantes)
+                  Dans les plages horaires ci-dessous, s'allume si la luminosité ne dépasse pas le seuil
                 </p>
               </div>
               <ToggleSwitch
@@ -253,6 +273,16 @@ export function AutomationPage() {
             </div>
 
             <ScheduleRangesEditor ranges={lightForm.ranges} onChange={(ranges) => setLightForm((f) => ({ ...f, ranges }))} />
+
+            <label className="mt-4 flex flex-col gap-1 text-xs font-semibold text-theme-textSecondary">
+              Seuil de luminosité (lux) — moyenne sur les 10 dernières minutes
+              <input
+                type="number"
+                value={lightForm.minLuminosity}
+                onChange={(e) => setLightForm((f) => ({ ...f, minLuminosity: e.target.value }))}
+                className="rounded-xl border border-slate-200 px-2 py-1.5 bg-white text-theme-textPrimary text-sm"
+              />
+            </label>
 
             <div className="mt-4 flex items-center gap-3">
               <button

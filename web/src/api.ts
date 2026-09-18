@@ -111,7 +111,7 @@ export async function toggleActuator(token: string, actuator: string, on: boolea
   });
 }
 
-export type RuleType = "schedule" | "threshold";
+export type RuleType = "schedule" | "threshold" | "schedule_threshold";
 export type ActionMode = "duration" | "until_target";
 
 export interface TimeRange {
@@ -132,11 +132,20 @@ export interface ThresholdConfig {
   target_value?: number; // si action_mode === "until_target"
 }
 
+// Lumière d'appoint : allumée seulement dans une des plages ET quand la
+// moyenne du capteur ne dépasse pas (ou dépasse, selon comparator) le seuil.
+export interface ScheduleThresholdConfig {
+  ranges: TimeRange[];
+  sensor: string;
+  comparator: "above" | "below";
+  threshold: number;
+}
+
 export interface AutomationRule {
   actuator: string;
   enabled: boolean;
   rule_type: RuleType;
-  config: ScheduleConfig | ThresholdConfig;
+  config: ScheduleConfig | ThresholdConfig | ScheduleThresholdConfig;
   updated_by: string | null;
   updated_at: string;
 }
@@ -159,7 +168,7 @@ export async function fetchGerminationChance(token: string): Promise<Germination
 export async function saveAutomationRule(
   token: string,
   actuator: string,
-  rule: { enabled: boolean; rule_type: RuleType; config: ScheduleConfig | ThresholdConfig },
+  rule: { enabled: boolean; rule_type: RuleType; config: ScheduleConfig | ThresholdConfig | ScheduleThresholdConfig },
 ): Promise<AutomationRule> {
   const res = await authedFetch(token, `/api/automation/rules/${actuator}`, {
     method: "PUT",

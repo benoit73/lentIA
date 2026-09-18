@@ -43,7 +43,7 @@ Raspberry Pi, capteurs et réseau de neurones).
 | `src/pages/Dashboard.tsx`       | Page d'accueil : grille des 5 capteurs + sélecteur de plage      |
 | `src/pages/ControlPage.tsx`     | Page « Contrôle » : actionneurs, aperçu du journal, retour caméra |
 | `src/pages/JournalPage.tsx`     | Journal complet : filtre par actionneur + plage, durée de chaque état |
-| `src/pages/AutomationPage.tsx`  | Configuration des règles (plage horaire multi-plages ou seuil) pour lumière, arrosage, ventilation, chauffage |
+| `src/pages/AutomationPage.tsx`  | Configuration des règles pour lumière (plage + seuil de luminosité), arrosage, ventilation, chauffage (plage horaire multi-plages ou seuil, au choix) |
 | `src/pages/SensorDetail.tsx`    | Détail d'un capteur : graphe + sélecteur de plage d'historique   |
 | `src/components/PageCylinder.tsx` | Carrousel 3D (glisser souris/tactile + flèches + clavier), rebouclage continu dernière↔première page |
 | `src/components/TopBar.tsx`     | Header (logo, badge de chances de survie centré, compte utilisateur) |
@@ -161,8 +161,9 @@ déclenche en tâche de fond).
 La page **Automatisation** du dashboard configure des règles évaluées côté
 serveur (`api/automation.py`, toutes les `AUTOMATION_POLL_SECONDS` — 30s par
 défaut) qui déclenchent les mêmes commandes qu'un interrupteur manuel, mais
-avec `source: "auto"` dans le journal. Les 4 actionneurs (lumière, arrosage,
-ventilation, chauffage) supportent chacun deux types de règles, au choix :
+avec `source: "auto"` dans le journal. L'arrosage, la ventilation et le
+chauffage supportent chacun deux types de règles au choix ; la lumière
+combine les deux à la fois (voir plus bas) :
 
 - **Plage(s) horaire(s)** (`schedule`) — une ou plusieurs plages
   début/fin (ex. 07:00–21:00) ; l'actionneur est activé quand l'heure
@@ -182,6 +183,12 @@ ventilation, chauffage) supportent chacun deux types de règles, au choix :
   - **Jusqu'à une valeur** (`action_mode: "until_target"`) — reste activé
     jusqu'à ce que la moyenne atteigne `target_value` (ex. arroser jusqu'à
     55% d'humidité du sol, chauffer jusqu'à 21°C).
+- **Plage horaire + seuil de luminosité** (`schedule_threshold`, réservée à
+  la lumière) — allumage d'appoint : activée seulement quand on est **à la
+  fois** dans une des plages horaires **et** que la luminosité moyenne (10
+  dernières minutes) ne dépasse pas le seuil réglé (en lux). En dehors des
+  plages, ou si la luminosité naturelle suffit déjà, la lumière reste
+  éteinte même si la règle est activée.
 
 Chaque actionneur n'a qu'une seule règle active à la fois (activer/désactiver
 + reconfigurer remplace la précédente). Une règle désactivée (`enabled:
@@ -196,9 +203,9 @@ false`) est ignorée par le moteur d'automatisation.
 actionneur) suivent le même schéma d'authentification que le reste de l'API :
 
 ```bash
-# Plage horaire (plusieurs plages, non chevauchantes)
+# Plage horaire + seuil de luminosité (lumière d'appoint)
 curl -X PUT -H "Authorization: Bearer $ID_TOKEN" -H "Content-Type: application/json" \
-  -d '{"enabled": true, "rule_type": "schedule", "config": {"ranges": [{"start": "07:00", "end": "09:00"}, {"start": "18:00", "end": "20:00"}]}}' \
+  -d '{"enabled": true, "rule_type": "schedule_threshold", "config": {"ranges": [{"start": "07:00", "end": "21:00"}], "sensor": "luminosity", "comparator": "below", "threshold": 150}}' \
   http://localhost:5000/api/automation/rules/light
 
 # Seuil, arrêt après une durée fixe

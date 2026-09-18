@@ -12,6 +12,10 @@ Schéma des règles (`config` selon `rule_type`) :
                   "action_mode": "duration"|"until_target",
                   "duration_minutes": 5,       # si action_mode == "duration"
                   "target_value": 55}          # si action_mode == "until_target"
+  'schedule_threshold' -> {"ranges": [...], "sensor": "luminosity",
+                  "comparator": "below"|"above", "threshold": 200}
+                 (lumière d'appoint : allumé seulement dans une plage ET
+                 quand la moyenne du capteur ne dépasse pas le seuil)
 
 Pas d'état séparé à maintenir pour "duration"/"until_target" : on relit
 l'état courant de l'actionneur (`db.fetch_actuator_states`), dont
@@ -77,6 +81,22 @@ def _threshold_desired_state(config: dict, currently_on: bool, state_updated_at)
     return elapsed_minutes < config["duration_minutes"]
 
 
+def _schedule_threshold_desired_state(config: dict, now_local: datetime):
+    """Combine plage horaire et seuil (lumière d'appoint) : n'allume que si
+    on est dans une des plages ET que la moyenne du capteur ne dépasse pas
+    (ou dépasse, selon `comparator`) le seuil. `None` si pas assez de
+    données pour décider une fois dans la plage."""
+    if not _schedule_desired_state(config, now_local):
+        return False
+
+    average = db.fetch_sensor_average(config["sensor"], AUTOMATION_AVERAGE_WINDOW_MINUTES)
+    if average is None:
+        return None
+
+    comparator = config["comparator"]
+    return average > config["threshold"] if comparator == "above" else average < config["threshold"]
+
+
 def evaluate_once():
     rules = db.fetch_automation_rules()
     states = db.fetch_actuator_states()
@@ -96,6 +116,8 @@ def evaluate_once():
             desired = _schedule_desired_state(rule["config"], now_local)
         elif rule["rule_type"] == "threshold":
             desired = _threshold_desired_state(rule["config"], currently_on, updated_at)
+        elif rule["rule_type"] == "schedule_threshold":
+            desired = _schedule_threshold_desired_state(rule["config"], now_local)
         else:
             continue
 

@@ -185,19 +185,35 @@ def _validate_schedule_ranges(ranges):
     return None
 
 
+def _validate_sensor_threshold(config):
+    """Vérifie {sensor, comparator, threshold}, commun aux rule_type
+    'threshold' et 'schedule_threshold'. Retourne un tuple (réponse, code)
+    en cas d'erreur, sinon None."""
+    if config.get("sensor") not in SENSOR_FIELDS:
+        return jsonify({"error": "config.sensor doit être un capteur connu"}), 400
+    if config.get("comparator") not in ("above", "below"):
+        return jsonify({"error": "config.comparator doit être 'above' ou 'below'"}), 400
+    if not _is_number(config.get("threshold")):
+        return jsonify({"error": "config.threshold doit être un nombre"}), 400
+    return None
+
+
 def _validate_rule_payload(rule_type, config):
     """Vérifie la forme de `config` selon `rule_type`. Retourne un tuple
     (réponse, code) à renvoyer tel quel en cas d'erreur, sinon None."""
     if rule_type == "schedule":
         return _validate_schedule_ranges(config.get("ranges"))
 
+    if rule_type == "schedule_threshold":
+        error = _validate_schedule_ranges(config.get("ranges"))
+        if error:
+            return error
+        return _validate_sensor_threshold(config)
+
     if rule_type == "threshold":
-        if config.get("sensor") not in SENSOR_FIELDS:
-            return jsonify({"error": "config.sensor doit être un capteur connu"}), 400
-        if config.get("comparator") not in ("above", "below"):
-            return jsonify({"error": "config.comparator doit être 'above' ou 'below'"}), 400
-        if not _is_number(config.get("threshold")):
-            return jsonify({"error": "config.threshold doit être un nombre"}), 400
+        error = _validate_sensor_threshold(config)
+        if error:
+            return error
 
         action_mode = config.get("action_mode")
         if action_mode == "duration":
@@ -211,7 +227,7 @@ def _validate_rule_payload(rule_type, config):
             return jsonify({"error": "config.action_mode doit être 'duration' ou 'until_target'"}), 400
         return None
 
-    return jsonify({"error": "rule_type doit être 'schedule' ou 'threshold'"}), 400
+    return jsonify({"error": "rule_type doit être 'schedule', 'threshold' ou 'schedule_threshold'"}), 400
 
 
 @bp.route("/api/automation/rules")
