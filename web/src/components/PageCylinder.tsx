@@ -25,13 +25,6 @@ interface Props {
 // (180° pour 2 faces) — il faut glisser franchement pour changer de page.
 const DRAG_DEGREES_PER_WIDTH = 140;
 
-// Rayon calculé comme si le tambour avait plus de faces que `n` : les vraies
-// faces restent espacées de 360/n (boucle fermée, nécessaire pour le
-// rebouclage continu ci-dessous), mais un rayon plus grand écarte les faces
-// de l'axe central et rend la rotation plus large/douce, moins "cube" (coins
-// serrés, faces proches de la caméra).
-const VISUAL_SIDES = 8;
-
 export function PageCylinder({ faces, activeIndex, onSettle }: Props) {
   const n = faces.length;
   const angleStep = 360 / n;
@@ -73,9 +66,10 @@ export function PageCylinder({ faces, activeIndex, onSettle }: Props) {
 
   // Pour 2 faces, la formule du polygone régulier dégénère (rayon nul) : on
   // fixe une profondeur raisonnable pour garder l'effet 3D. Pour 3+ faces,
-  // la formule aligne les faces bord à bord comme un vrai tambour (avec
-  // VISUAL_SIDES > n pour l'élargir, voir plus haut).
-  const radius = n <= 2 ? width * 0.42 : width / (2 * Math.tan(Math.PI / Math.max(n, VISUAL_SIDES)));
+  // la formule aligne les faces bord à bord comme un vrai tambour (rayon
+  // exact pour `n` faces — un rayon plus grand désaligne les bords et laisse
+  // un espace vide visible entre deux faces pendant la rotation).
+  const radius = n <= 2 ? width * 0.42 : width / (2 * Math.tan(Math.PI / n));
 
   const baseAngle = -steps * angleStep;
   const currentAngle = baseAngle + dragOffsetDeg;
@@ -138,7 +132,7 @@ export function PageCylinder({ faces, activeIndex, onSettle }: Props) {
       <div
         ref={containerRef}
         className="absolute inset-0 overflow-hidden outline-none"
-        style={{ perspective: "2400px", touchAction: "pan-y" }}
+        style={{ perspective: "1800px", touchAction: "pan-y" }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
