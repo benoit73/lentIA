@@ -8,6 +8,7 @@ export default function App() {
     <RequireAuth>
       <Routes>
         <Route path="/" element={<CarouselShell />} />
+        <Route path="/historique" element={<CarouselShell />} />
         <Route path="/controle" element={<CarouselShell />} />
         <Route path="/journal" element={<CarouselShell />} />
         <Route path="/automatisation" element={<CarouselShell />} />

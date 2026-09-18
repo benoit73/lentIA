@@ -186,13 +186,13 @@ export function PageCylinder({ faces, activeIndex, onSettle }: Props) {
         ›
       </button>
 
-      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 glass-pill rounded-full p-1 flex items-center gap-1 shadow-soft-card border border-white/70">
+      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 max-w-[calc(100vw-1.5rem)] overflow-x-auto glass-pill rounded-full p-1 flex items-center gap-1 shadow-soft-card border border-white/70">
         {faces.map((face, i) => (
           <button
             key={face.path}
             type="button"
             onClick={() => goToIndex(i)}
-            className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition ${
+            className={`px-2.5 sm:px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition ${
               i === activeIndex
                 ? "bg-white shadow-sm text-theme-textPrimary"
                 : "text-theme-textSecondary hover:text-theme-textPrimary"

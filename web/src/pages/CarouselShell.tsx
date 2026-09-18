@@ -4,6 +4,7 @@ import { TopBar } from "../components/TopBar";
 import { AutomationPage } from "./AutomationPage";
 import { ControlPage } from "./ControlPage";
 import { Dashboard } from "./Dashboard";
+import { HistoryPage } from "./HistoryPage";
 import { JournalPage } from "./JournalPage";
 
 export function CarouselShell() {
@@ -12,6 +13,7 @@ export function CarouselShell() {
 
   const pages = [
     { path: "/", label: "Dashboard", node: <Dashboard /> },
+    { path: "/historique", label: "Historique", node: <HistoryPage /> },
     { path: "/controle", label: "Contrôle", node: <ControlPage /> },
     { path: "/journal", label: "Journal", node: <JournalPage /> },
     { path: "/automatisation", label: "Automatisation", node: <AutomationPage /> },

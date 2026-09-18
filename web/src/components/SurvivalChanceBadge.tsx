@@ -41,18 +41,20 @@ export function SurvivalChanceBadge() {
 
   if (pct === null) {
     return unavailable ? (
-      <div className="glass-pill rounded-full px-4 py-1.5 text-xs font-semibold text-theme-textMuted border border-white/70">
-        Chances de survie : pas encore de données
+      <div className="glass-pill rounded-full px-3 sm:px-4 py-1.5 text-xs font-semibold text-theme-textMuted border border-white/70 whitespace-nowrap">
+        <span className="sm:hidden">Survie : —</span>
+        <span className="hidden sm:inline">Chances de survie : pas encore de données</span>
       </div>
     ) : null;
   }
 
   return (
     <div
-      className={`rounded-full px-4 py-1.5 flex items-center gap-2 text-xs font-bold shadow-sm ${colorClasses(pct)}`}
+      className={`rounded-full px-3 sm:px-4 py-1.5 flex items-center gap-2 text-xs font-bold shadow-sm whitespace-nowrap ${colorClasses(pct)}`}
       title="Chances de survie prédites à partir des derniers relevés capteur"
     >
-      <span className="uppercase tracking-wide font-semibold opacity-80">Chances de survie</span>
+      <span className="hidden sm:inline uppercase tracking-wide font-semibold opacity-80">Chances de survie</span>
+      <span className="sm:hidden uppercase tracking-wide font-semibold opacity-80">Survie</span>
       <span className="text-sm">{pct.toFixed(0)}%</span>
     </div>
   );

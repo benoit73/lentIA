@@ -10,9 +10,9 @@ export function TopBar() {
         <div className="w-9 h-9 rounded-xl bg-theme-textPrimary text-white flex items-center justify-center font-bold">
           L
         </div>
-        <div>
-          <h1 className="font-bold text-sm text-theme-textPrimary">LentIA — Dashboard</h1>
-          <p className="text-[11px] text-theme-textSecondary">Suivi du bac de lentilles</p>
+        <div className="min-w-0">
+          <h1 className="font-bold text-sm text-theme-textPrimary leading-tight whitespace-nowrap">LentIA</h1>
+          <p className="hidden sm:block text-[11px] text-theme-textSecondary">Suivi du bac de lentilles</p>
         </div>
       </div>
 

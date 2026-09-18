@@ -39,8 +39,9 @@ Raspberry Pi, capteurs et réseau de neurones).
 | Dossier/fichier              | Rôle                                                            |
 |--------------------------------|------------------------------------------------------------------|
 | `src/auth/`                     | Connexion Google Sign-In (`AuthContext`, bouton, garde `RequireAuth`) |
-| `src/pages/CarouselShell.tsx`   | Header fixe (`TopBar`, hors animation) + fait tourner Dashboard/Contrôle/Journal/Automatisation dans le cylindre 3D (`PageCylinder`) |
-| `src/pages/Dashboard.tsx`       | Page d'accueil : grille des 5 capteurs + sélecteur de plage      |
+| `src/pages/CarouselShell.tsx`   | Header fixe (`TopBar`, hors animation) + fait tourner Dashboard/Historique/Contrôle/Journal/Automatisation dans le cylindre 3D (`PageCylinder`) |
+| `src/pages/Dashboard.tsx`       | Page d'accueil : grille de widgets (réservoir, éclairage, survie IA, climat, sol, actionneurs, prochaines actions) |
+| `src/pages/HistoryPage.tsx`     | Grille des 5 capteurs avec courbes + sélecteur de plage (l'ancienne page d'accueil) |
 | `src/pages/ControlPage.tsx`     | Page « Contrôle » : actionneurs, aperçu du journal, retour caméra |
 | `src/pages/JournalPage.tsx`     | Journal complet : filtre par actionneur + plage, durée de chaque état |
 | `src/pages/AutomationPage.tsx`  | Configuration des règles pour lumière (plage + seuil de luminosité), arrosage, ventilation, chauffage (plage horaire multi-plages ou seuil, au choix) |
@@ -48,6 +49,8 @@ Raspberry Pi, capteurs et réseau de neurones).
 | `src/components/PageCylinder.tsx` | Carrousel 3D (glisser souris/tactile + flèches + clavier), rebouclage continu dernière↔première page |
 | `src/components/TopBar.tsx`     | Header (logo, badge de chances de survie centré, compte utilisateur) |
 | `src/components/SurvivalChanceBadge.tsx` | Badge du header : % de chances de survie (couleur selon la valeur), rafraîchi toutes les 10s |
+| `src/components/widgets/`       | Widgets du dashboard : `WaterTankWidget` (jauge litres), `LightingWidget` (lampe + exposition du jour), `SurvivalRingWidget` (anneau IA + conseils), `ClimateWidget`, `SoilMoistureWidget`, `ActuatorsWidget` (tuiles cliquables), `NextActionsWidget`, sur une coquille commune `WidgetCard` |
+| `src/components/SensorCard.tsx` | Carte capteur de la page Historique : valeur, état, cible IA, mini-courbe |
 | `src/components/ActuatorPanel.tsx` | Tableau lumière/chauffage/arrosage/ventilation (juste les interrupteurs) |
 | `src/components/JournalPreview.tsx` | Aperçu des dernières actions dans la page Contrôle, lien vers le journal complet |
 | `src/components/CameraPanel.tsx`   | Emplacement retour caméra (placeholder tant qu'il n'y a pas de caméra) |
@@ -116,6 +119,26 @@ une moyenne mobile sur `CHART_SMOOTHING_WINDOW` points (`web/src/config.ts`,
 HC-SR04 en particulier peut sauter ponctuellement à 0 ou 100% sur un écho
 parasite. La fenêtre se réinitialise à chaque trou (`withGapBreaks`) : on ne
 lisse jamais à travers une coupure réelle.
+
+### Dashboard en widgets
+
+La page d'accueil n'affiche pas de courbes : c'est une grille de widgets
+(`web/src/components/widgets/`) pensée pour se lire d'un coup d'œil — les
+courbes vivent sur la page **Historique**. Chaque widget dérive son contenu
+de données déjà exposées par l'API, sans nouvelle route :
+
+| Widget | Source |
+|---|---|
+| Réservoir d'eau | `water_level` en temps réel ; les litres viennent de `WATER_TANK_LITERS` (`web/src/config.ts`, 5 L) puisque le capteur ne renvoie qu'un % |
+| Éclairage horticole | somme des périodes `light` allumées aujourd'hui (`/api/actuators/events`, période en cours comptée jusqu'à maintenant) sur la cible = total des plages de la règle, sinon `DEFAULT_LIGHT_TARGET_HOURS` |
+| Chances de survie | `/api/prediction/germination` + les 2 capteurs les plus loin de leur cible `/api/prediction/recommendations` |
+| Climat / Humidité du sol | valeurs temps réel + repère sur la cible IA ; « dernier arrosage » vient du journal des actionneurs |
+| Actionneurs | `/api/actuators/state`, tuiles avec interrupteur (mêmes commandes que la page Contrôle) |
+| Prochaines actions | règles d'automatisation : prochaine plage horaire à venir, ou condition de seuil pour les règles sans horaire |
+
+Deux cadences de rafraîchissement : `ACTUATOR_POLL_MS` (5s) pour les états et
+le journal, 30s pour les règles et les prédictions (plus lourdes à calculer,
+et beaucoup plus stables).
 
 ## Actionneurs (lumière, chauffage, arrosage, ventilation)
 
@@ -355,9 +378,9 @@ Puis ouvrir : **http://localhost**
 - Temps réel : le dashboard ouvre une connexion WebSocket par capteur vers
   `/ws/sensors/<capteur>`. L'API garde la connexion MQTT en interne (le
   navigateur ne parle jamais directement au broker).
-- Navigation : **Dashboard**, **Contrôle** (actionneurs + caméra),
-  **Journal** (historique des commandes) et **Automatisation** (règles)
-  tournent dans un carrousel 3D — glisse à la souris ou au doigt, utilise
+- Navigation : **Dashboard** (widgets), **Historique** (courbes par capteur),
+  **Contrôle** (actionneurs + caméra), **Journal** (historique des commandes)
+  et **Automatisation** (règles) tournent dans un carrousel 3D — glisse à la souris ou au doigt, utilise
   les flèches gauche/droite, ou clique sur l'onglet en bas de l'écran. Le
   rebouclage est continu : de la dernière page à la première (et
   inversement), la rotation continue dans le même sens plutôt que de

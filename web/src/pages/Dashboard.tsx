@@ -1,69 +1,135 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { ApiError, fetchGerminationRecommendations, type GerminationRecommendations } from "../api";
+import { useCallback, useEffect, useState } from "react";
+import {
+  ApiError,
+  fetchActuatorEvents,
+  fetchActuatorStates,
+  fetchAutomationRules,
+  fetchGerminationChance,
+  fetchGerminationRecommendations,
+  toggleActuator,
+  type ActuatorEvent,
+  type ActuatorState,
+  type AutomationRule,
+  type GerminationRecommendations,
+} from "../api";
 import { useAuth } from "../auth/AuthContext";
-import { SENSORS } from "../config";
-import { SensorCard } from "../components/SensorCard";
-import { PresetKey, presetToRange, RangePicker } from "../components/RangePicker";
+import { ActuatorsWidget } from "../components/widgets/ActuatorsWidget";
+import { ClimateWidget } from "../components/widgets/ClimateWidget";
+import { LightingWidget } from "../components/widgets/LightingWidget";
+import { NextActionsWidget } from "../components/widgets/NextActionsWidget";
+import { SoilMoistureWidget } from "../components/widgets/SoilMoistureWidget";
+import { SurvivalRingWidget } from "../components/widgets/SurvivalRingWidget";
+import { WaterTankWidget } from "../components/widgets/WaterTankWidget";
+import { ACTUATOR_POLL_MS } from "../config";
 import { usePolling } from "../hooks/usePolling";
 
-// Recommandations (réseau de neurones) : plus coûteuses à calculer que la
-// simple prédiction du header (balayage par capteur côté serveur), et les
-// cibles n'ont pas besoin d'être aussi réactives — intervalle plus long.
-const RECOMMENDATIONS_POLL_MS = 30_000;
+// États et journal changent vite (une règle peut basculer un actionneur à
+// tout moment) ; règles, prédiction et recommandations bougent lentement et
+// coûtent plus cher à calculer côté serveur.
+const SLOW_POLL_MS = 30_000;
 
 export function Dashboard() {
-  const { token } = useAuth();
-  const [preset, setPreset] = useState<PresetKey>("24h");
-  const [customStart, setCustomStart] = useState("");
-  const [customEnd, setCustomEnd] = useState("");
+  const { token, signOut } = useAuth();
+  const [states, setStates] = useState<Record<string, ActuatorState>>({});
+  const [events, setEvents] = useState<ActuatorEvent[]>([]);
+  const [rules, setRules] = useState<Record<string, AutomationRule>>({});
+  const [chancePct, setChancePct] = useState<number | null>(null);
   const [recommendations, setRecommendations] = useState<GerminationRecommendations | null>(null);
+  const [pending, setPending] = useState<string | null>(null);
+  const [actuatorError, setActuatorError] = useState<string | null>(null);
 
-  const range = useMemo(() => presetToRange(preset, customStart, customEnd), [preset, customStart, customEnd]);
-
-  const loadRecommendations = useCallback(() => {
+  const loadLive = useCallback(async () => {
     if (!token) return;
-    fetchGerminationRecommendations(token)
-      .then(setRecommendations)
-      .catch((err) => {
-        // 503 : pas encore de relevé pour un des capteurs — pas une vraie
-        // erreur, on garde juste les cartes sans badge "Cible IA".
-        if (!(err instanceof ApiError && err.status === 503)) return;
-      });
+    // Depuis hier minuit : une période d'éclairage commencée hier soir doit
+    // encore être comptée dans l'exposition du jour.
+    const since = new Date();
+    since.setHours(0, 0, 0, 0);
+    since.setDate(since.getDate() - 1);
+
+    try {
+      const [nextStates, nextEvents] = await Promise.all([
+        fetchActuatorStates(token),
+        fetchActuatorEvents(token, { start: since.toISOString(), limit: 200 }),
+      ]);
+      setStates(nextStates);
+      setEvents(nextEvents);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) signOut();
+    }
+  }, [token, signOut]);
+
+  const loadSlow = useCallback(async () => {
+    if (!token) return;
+    // allSettled : un capteur sans relevé fait échouer la prédiction (503)
+    // sans que ça doive priver le dashboard des règles d'automatisation.
+    const [rulesResult, chanceResult, recommendationsResult] = await Promise.allSettled([
+      fetchAutomationRules(token),
+      fetchGerminationChance(token),
+      fetchGerminationRecommendations(token),
+    ]);
+    if (rulesResult.status === "fulfilled") setRules(rulesResult.value);
+    if (chanceResult.status === "fulfilled") setChancePct(chanceResult.value.chance_pct);
+    if (recommendationsResult.status === "fulfilled") setRecommendations(recommendationsResult.value);
   }, [token]);
 
   useEffect(() => {
-    loadRecommendations();
-  }, [loadRecommendations]);
+    loadLive();
+    loadSlow();
+  }, [loadLive, loadSlow]);
 
-  usePolling(loadRecommendations, RECOMMENDATIONS_POLL_MS);
+  usePolling(loadLive, ACTUATOR_POLL_MS);
+  usePolling(loadSlow, SLOW_POLL_MS);
+
+  async function handleToggle(key: string, next: boolean) {
+    if (!token) return;
+    setPending(key);
+    setActuatorError(null);
+    // Pas de retour matériel : on affiche l'état commandé tout de suite,
+    // la commande part en parallèle sur MQTT.
+    setStates((prev) => ({ ...prev, [key]: { state: next, updated_at: new Date().toISOString() } }));
+    try {
+      await toggleActuator(token, key, next);
+      await loadLive();
+    } catch (err) {
+      setActuatorError("Impossible de changer l'état de l'actionneur.");
+      if (err instanceof ApiError && err.status === 401) signOut();
+      loadLive();
+    } finally {
+      setPending(null);
+    }
+  }
 
   return (
     <div className="min-h-full p-4 sm:p-6 lg:p-8 pb-20">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <h2 className="font-bold text-sm text-theme-textSecondary uppercase tracking-wide">Vue d'ensemble</h2>
-        <RangePicker
-          preset={preset}
-          customStart={customStart}
-          customEnd={customEnd}
-          onPresetChange={setPreset}
-          onCustomChange={(start, end) => {
-            setCustomStart(start);
-            setCustomEnd(end);
-          }}
-        />
-      </div>
+      <h2 className="font-bold text-sm text-theme-textSecondary uppercase tracking-wide">Vue d'ensemble</h2>
 
-      <main className="mt-3 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-5">
-        {SENSORS.map((sensor) => (
-          <SensorCard
-            key={sensor.key}
-            sensor={sensor}
-            range={range}
-            live={preset !== "custom"}
-            recommendedValue={recommendations?.recommendations[sensor.key]?.recommended_value}
-          />
-        ))}
-      </main>
+      <div className="mt-3 grid grid-cols-1 lg:grid-cols-4 gap-4 lg:gap-5">
+        <WaterTankWidget delayMs={0} className="lg:col-span-3" />
+
+        {/* Colonne de droite sur deux rangées : le seul widget vertical,
+            il équilibre la grille face aux jauges horizontales. */}
+        <LightingWidget
+          on={states.light?.state ?? false}
+          events={events}
+          rule={rules.light}
+          delayMs={60}
+          className="lg:row-span-2"
+        />
+
+        <SurvivalRingWidget chancePct={chancePct} recommendations={recommendations} delayMs={120} />
+        <ClimateWidget recommendations={recommendations} delayMs={180} />
+        <SoilMoistureWidget events={events} recommendations={recommendations} delayMs={240} />
+
+        <ActuatorsWidget
+          states={states}
+          pending={pending}
+          onToggle={handleToggle}
+          error={actuatorError}
+          delayMs={300}
+          className="lg:col-span-3"
+        />
+        <NextActionsWidget rules={rules} delayMs={360} />
+      </div>
     </div>
   );
 }

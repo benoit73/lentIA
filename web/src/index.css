@@ -14,3 +14,43 @@ body {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
+
+/* Widgets du dashboard : apparition décalée à l'arrivée sur la page, et
+   halo qui respire sous un actionneur actif. */
+@keyframes widget-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.widget-in {
+  animation: widget-in 460ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes soft-pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scale(1.08);
+  }
+}
+
+.soft-pulse {
+  animation: soft-pulse 2.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .widget-in,
+  .soft-pulse {
+    animation: none;
+  }
+}

@@ -14,6 +14,14 @@ export const ACTUATOR_POLL_MS = 5_000;
 // bruit de mesure, ex. HC-SR04). 1 = pas de lissage.
 export const CHART_SMOOTHING_WINDOW = 5;
 
+// Le capteur de niveau ne renvoie qu'un pourcentage : c'est cette capacité
+// qui permet d'afficher aussi des litres sur le widget Réservoir.
+export const WATER_TANK_LITERS = 5;
+
+// Durée d'éclairage visée sur une journée quand la lumière n'a pas de règle
+// d'automatisation programmée (sinon la cible vient des plages de la règle).
+export const DEFAULT_LIGHT_TARGET_HOURS = 16;
+
 export interface SensorMeta {
   key: string;
   label: string;
