@@ -146,6 +146,16 @@ export async function fetchAutomationRules(token: string): Promise<Record<string
   return res.json();
 }
 
+export interface GerminationPrediction {
+  chance_pct: number;
+  based_on: Record<string, number>;
+}
+
+export async function fetchGerminationChance(token: string): Promise<GerminationPrediction> {
+  const res = await authedFetch(token, "/api/prediction/germination");
+  return res.json();
+}
+
 export async function saveAutomationRule(
   token: string,
   actuator: string,

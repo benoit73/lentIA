@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import { SENSORS } from "../config";
 import { SensorCard } from "../components/SensorCard";
 import { PresetKey, presetToRange, RangePicker } from "../components/RangePicker";
-import { TopBar } from "../components/TopBar";
 
 export function Dashboard() {
   const [preset, setPreset] = useState<PresetKey>("24h");
@@ -12,10 +11,8 @@ export function Dashboard() {
   const range = useMemo(() => presetToRange(preset, customStart, customEnd), [preset, customStart, customEnd]);
 
   return (
-    <div className="min-h-screen p-4 sm:p-6 lg:p-8 pb-20">
-      <TopBar />
-
-      <div className="mt-5 flex items-center justify-between gap-3 flex-wrap">
+    <div className="min-h-full p-4 sm:p-6 lg:p-8 pb-20">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <h2 className="font-bold text-sm text-theme-textSecondary uppercase tracking-wide">Vue d'ensemble</h2>
         <RangePicker
           preset={preset}

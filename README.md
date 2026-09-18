@@ -39,13 +39,15 @@ Raspberry Pi, capteurs et réseau de neurones).
 | Dossier/fichier              | Rôle                                                            |
 |--------------------------------|------------------------------------------------------------------|
 | `src/auth/`                     | Connexion Google Sign-In (`AuthContext`, bouton, garde `RequireAuth`) |
-| `src/pages/CarouselShell.tsx`   | Fait tourner Dashboard/Contrôle/Journal/Automatisation dans le cylindre 3D (`PageCylinder`) |
+| `src/pages/CarouselShell.tsx`   | Header fixe (`TopBar`, hors animation) + fait tourner Dashboard/Contrôle/Journal/Automatisation dans le cylindre 3D (`PageCylinder`) |
 | `src/pages/Dashboard.tsx`       | Page d'accueil : grille des 5 capteurs + sélecteur de plage      |
 | `src/pages/ControlPage.tsx`     | Page « Contrôle » : actionneurs, aperçu du journal, retour caméra |
 | `src/pages/JournalPage.tsx`     | Journal complet : filtre par actionneur + plage, durée de chaque état |
 | `src/pages/AutomationPage.tsx`  | Configuration des règles (plage horaire multi-plages ou seuil) pour lumière, arrosage, ventilation, chauffage |
 | `src/pages/SensorDetail.tsx`    | Détail d'un capteur : graphe + sélecteur de plage d'historique   |
-| `src/components/PageCylinder.tsx` | Carrousel 3D (glisser souris/tactile + flèches + clavier)     |
+| `src/components/PageCylinder.tsx` | Carrousel 3D (glisser souris/tactile + flèches + clavier), rebouclage continu dernière↔première page |
+| `src/components/TopBar.tsx`     | Header (logo, badge de chances de survie centré, compte utilisateur) |
+| `src/components/SurvivalChanceBadge.tsx` | Badge du header : % de chances de survie (couleur selon la valeur), rafraîchi toutes les 10s |
 | `src/components/ActuatorPanel.tsx` | Tableau lumière/chauffage/arrosage/ventilation (juste les interrupteurs) |
 | `src/components/JournalPreview.tsx` | Aperçu des dernières actions dans la page Contrôle, lien vers le journal complet |
 | `src/components/CameraPanel.tsx`   | Emplacement retour caméra (placeholder tant qu'il n'y a pas de caméra) |
@@ -247,6 +249,8 @@ curl -H "Authorization: Bearer $ID_TOKEN" http://localhost:5000/api/prediction/g
 
 Renvoie `503` si un des 4 capteurs n'a encore jamais reçu de relevé.
 
+Le dashboard affiche ce % dans un badge au centre du header (`SurvivalChanceBadge.tsx`), rafraîchi toutes les 10s, coloré selon la valeur (rouge < 33%, orange 33-66%, vert ≥ 66%) — visible sur les 4 pages du carrousel puisque le header est commun.
+
 ## Authentification (OAuth)
 
 L'API et le dashboard sont protégés par Google Sign-In (OpenID Connect) :
@@ -323,7 +327,11 @@ Puis ouvrir : **http://localhost**
 - Navigation : **Dashboard**, **Contrôle** (actionneurs + caméra),
   **Journal** (historique des commandes) et **Automatisation** (règles)
   tournent dans un carrousel 3D — glisse à la souris ou au doigt, utilise
-  les flèches gauche/droite, ou clique sur l'onglet en bas de l'écran.
+  les flèches gauche/droite, ou clique sur l'onglet en bas de l'écran. Le
+  rebouclage est continu : de la dernière page à la première (et
+  inversement), la rotation continue dans le même sens plutôt que de
+  repasser en arrière par toutes les pages intermédiaires. Le header (logo,
+  badge de chances de survie, compte) est fixe, hors de l'animation.
   Cliquer sur un capteur reste une navigation classique vers sa page de
   détail (pas dans le carrousel).
 

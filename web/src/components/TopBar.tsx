@@ -1,10 +1,11 @@
 import { useAuth } from "../auth/AuthContext";
+import { SurvivalChanceBadge } from "./SurvivalChanceBadge";
 
 export function TopBar() {
   const { user, signOut } = useAuth();
 
   return (
-    <header className="flex items-center justify-between gap-4 bg-white/80 backdrop-blur rounded-3xl px-5 py-3 shadow-soft-card">
+    <header className="grid grid-cols-[1fr_auto_1fr] items-center gap-4 bg-white/80 backdrop-blur rounded-3xl px-5 py-3 shadow-soft-card">
       <div className="flex items-center gap-2">
         <div className="w-9 h-9 rounded-xl bg-theme-textPrimary text-white flex items-center justify-center font-bold">
           L
@@ -14,8 +15,13 @@ export function TopBar() {
           <p className="text-[11px] text-theme-textSecondary">Suivi du bac de lentilles</p>
         </div>
       </div>
+
+      <div className="flex justify-center">
+        <SurvivalChanceBadge />
+      </div>
+
       {user && (
-        <div className="flex items-center gap-3">
+        <div className="flex items-center justify-end gap-3">
           <div className="text-right hidden sm:block">
             <p className="text-xs font-bold text-theme-textPrimary">{user.name}</p>
             <p className="text-[10px] text-theme-textSecondary">{user.email}</p>

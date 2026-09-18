@@ -12,7 +12,6 @@ import { useAuth } from "../auth/AuthContext";
 import { FlexibleActuatorCard, type FlexibleForm } from "../components/automation/FlexibleActuatorCard";
 import { ScheduleRangesEditor } from "../components/automation/ScheduleRangesEditor";
 import { ToggleSwitch } from "../components/ToggleSwitch";
-import { TopBar } from "../components/TopBar";
 
 interface ScheduleOnlyForm {
   enabled: boolean;
@@ -222,10 +221,8 @@ export function AutomationPage() {
   }
 
   return (
-    <div className="min-h-screen p-4 sm:p-6 lg:p-8 pb-20">
-      <TopBar />
-
-      <div className="mt-5">
+    <div className="min-h-full p-4 sm:p-6 lg:p-8 pb-20">
+      <div>
         <h2 className="font-bold text-sm text-theme-textSecondary uppercase tracking-wide">Automatisation</h2>
         <p className="mt-1 text-xs text-theme-textSecondary max-w-2xl">
           Ces règles sont vérifiées côté serveur toutes les ~30 secondes et déclenchent les mêmes commandes MQTT

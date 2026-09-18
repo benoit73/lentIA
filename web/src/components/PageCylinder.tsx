@@ -25,12 +25,24 @@ interface Props {
 // (180° pour 2 faces) — il faut glisser franchement pour changer de page.
 const DRAG_DEGREES_PER_WIDTH = 140;
 
+// Rayon calculé comme si le tambour avait plus de faces que `n` : les vraies
+// faces restent espacées de 360/n (boucle fermée, nécessaire pour le
+// rebouclage continu ci-dessous), mais un rayon plus grand écarte les faces
+// de l'axe central et rend la rotation plus large/douce, moins "cube" (coins
+// serrés, faces proches de la caméra).
+const VISUAL_SIDES = 8;
+
 export function PageCylinder({ faces, activeIndex, onSettle }: Props) {
   const n = faces.length;
   const angleStep = 360 / n;
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
+  // Rotation continue (non bornée), contrairement à `activeIndex` (mod n,
+  // pour l'URL) : permet à la dernière page -> première page de continuer
+  // dans le même sens plutôt que revenir en arrière en repassant par toutes
+  // les pages intermédiaires.
+  const [steps, setSteps] = useState(activeIndex);
   const [dragOffsetDeg, setDragOffsetDeg] = useState(0);
   const [dragging, setDragging] = useState(false);
   const dragStartX = useRef(0);
@@ -43,18 +55,36 @@ export function PageCylinder({ faces, activeIndex, onSettle }: Props) {
     return () => observer.disconnect();
   }, []);
 
+  // Recale `steps` si `activeIndex` change sans passer par nos handlers
+  // (navigation externe : bouton précédent du navigateur, lien direct...) —
+  // au plus court sur le cercle, dans un sens ou l'autre. Sans effet quand
+  // le changement vient de nos propres handlers (goTo/settle mettent déjà
+  // `steps` à jour avant que ce prop ne change).
+  useEffect(() => {
+    setSteps((current) => {
+      const currentIndex = ((current % n) + n) % n;
+      if (currentIndex === activeIndex) return current;
+      let delta = activeIndex - currentIndex;
+      if (delta > n / 2) delta -= n;
+      if (delta < -n / 2) delta += n;
+      return current + delta;
+    });
+  }, [activeIndex, n]);
+
   // Pour 2 faces, la formule du polygone régulier dégénère (rayon nul) : on
   // fixe une profondeur raisonnable pour garder l'effet 3D. Pour 3+ faces,
-  // la formule aligne les faces bord à bord comme un vrai tambour.
-  const radius = n <= 2 ? width * 0.42 : width / (2 * Math.tan(Math.PI / n));
+  // la formule aligne les faces bord à bord comme un vrai tambour (avec
+  // VISUAL_SIDES > n pour l'élargir, voir plus haut).
+  const radius = n <= 2 ? width * 0.42 : width / (2 * Math.tan(Math.PI / Math.max(n, VISUAL_SIDES)));
 
-  const baseAngle = -activeIndex * angleStep;
+  const baseAngle = -steps * angleStep;
   const currentAngle = baseAngle + dragOffsetDeg;
 
   const settle = useCallback(
     (finalAngle: number) => {
-      const steps = Math.round(-finalAngle / angleStep);
-      const nextIndex = ((steps % n) + n) % n;
+      const nextSteps = Math.round(-finalAngle / angleStep);
+      const nextIndex = ((nextSteps % n) + n) % n;
+      setSteps(nextSteps);
       setDragOffsetDeg(0);
       setDragging(false);
       onSettle(nextIndex);
@@ -79,8 +109,23 @@ export function PageCylinder({ faces, activeIndex, onSettle }: Props) {
     settle(baseAngle + dragOffsetDeg);
   }
 
+  // Toujours relatif à la position continue actuelle : +1/-1 avance dans le
+  // sens demandé même en repassant par la boucle (dernière -> première page).
   function goTo(delta: number) {
-    onSettle(((activeIndex + delta) % n + n) % n);
+    const nextSteps = steps + delta;
+    setSteps(nextSteps);
+    onSettle(((nextSteps % n) + n) % n);
+  }
+
+  // Saut direct vers un index (onglets du bas) : au plus court sur le
+  // cercle, dans un sens ou l'autre — donc dernière -> première continue
+  // vers la droite plutôt que de revenir en arrière.
+  function goToIndex(target: number) {
+    const currentIndex = ((steps % n) + n) % n;
+    let delta = target - currentIndex;
+    if (delta > n / 2) delta -= n;
+    if (delta < -n / 2) delta += n;
+    goTo(delta);
   }
 
   function handleKeyDown(e: ReactKeyboardEvent<HTMLDivElement>) {
@@ -93,7 +138,7 @@ export function PageCylinder({ faces, activeIndex, onSettle }: Props) {
       <div
         ref={containerRef}
         className="absolute inset-0 overflow-hidden outline-none"
-        style={{ perspective: "1800px", touchAction: "pan-y" }}
+        style={{ perspective: "2400px", touchAction: "pan-y" }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
@@ -152,7 +197,7 @@ export function PageCylinder({ faces, activeIndex, onSettle }: Props) {
           <button
             key={face.path}
             type="button"
-            onClick={() => onSettle(i)}
+            onClick={() => goToIndex(i)}
             className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition ${
               i === activeIndex
                 ? "bg-white shadow-sm text-theme-textPrimary"
