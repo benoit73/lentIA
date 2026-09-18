@@ -9,6 +9,20 @@ import { sensorByKey } from "../config";
 import { useLiveSeries } from "../hooks/useLiveSeries";
 import { useSensorRealtime } from "../hooks/useSensorRealtime";
 
+function BackToDashboardButton() {
+  return (
+    <Link
+      to="/"
+      className="mt-4 inline-flex items-center gap-1.5 px-4 py-2.5 rounded-full bg-white shadow-soft-card text-sm font-bold text-theme-textPrimary hover:bg-theme-accent hover:text-white transition"
+    >
+      <span aria-hidden className="text-base leading-none">
+        ←
+      </span>
+      Retour au dashboard
+    </Link>
+  );
+}
+
 export function SensorDetail() {
   const { sensor: sensorKey } = useParams<{ sensor: string }>();
   const sensor = sensorByKey(sensorKey);
@@ -34,11 +48,9 @@ export function SensorDetail() {
     return (
       <div className="min-h-screen p-4 sm:p-6 lg:p-8">
         <TopBar />
-        <main className="mt-5 bg-theme-card rounded-3xl p-6 shadow-soft-card">
+        <BackToDashboardButton />
+        <main className="mt-4 bg-theme-card rounded-3xl p-6 shadow-soft-card">
           <p className="text-sm text-theme-textPrimary">Capteur inconnu.</p>
-          <Link to="/" className="text-xs font-bold text-theme-accent">
-            ← Retour au dashboard
-          </Link>
         </main>
       </div>
     );
@@ -47,13 +59,11 @@ export function SensorDetail() {
   return (
     <div className="min-h-screen p-4 sm:p-6 lg:p-8">
       <TopBar />
-      <main className="mt-5 max-w-4xl mx-auto bg-theme-card rounded-3xl p-5 shadow-soft-card">
+      <BackToDashboardButton />
+      <main className="mt-4 max-w-4xl mx-auto bg-theme-card rounded-3xl p-5 shadow-soft-card">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <Link to="/" className="text-xs font-bold text-theme-accent">
-              ← Retour au dashboard
-            </Link>
-            <h1 className="font-bold text-2xl text-theme-textPrimary tracking-tight mt-1">{sensor.label}</h1>
+            <h1 className="font-bold text-2xl text-theme-textPrimary tracking-tight">{sensor.label}</h1>
             <p className="text-sm text-theme-textSecondary mt-0.5 flex items-center gap-2 flex-wrap">
               <span>
                 Valeur actuelle :{" "}

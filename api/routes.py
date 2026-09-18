@@ -112,9 +112,10 @@ def toggle_actuator(actuator):
     return jsonify({"actuator": actuator, "on": state})
 
 
-@bp.route("/api/prediction/germination")
-@require_auth
-def germination_prediction():
+def _fetch_latest_prediction_sensors():
+    """Dernier relevé de chaque capteur utilisé par le modèle de prédiction.
+    Retourne (valeurs, None) ou (None, réponse_erreur) si un capteur n'a
+    encore rien reçu."""
     latest = {}
     missing = []
     for sensor in PREDICTION_SENSORS:
@@ -125,7 +126,16 @@ def germination_prediction():
             latest[sensor] = reading["value"]
 
     if missing:
-        return jsonify({"error": f"pas encore de relevé pour : {', '.join(missing)}"}), 503
+        return None, (jsonify({"error": f"pas encore de relevé pour : {', '.join(missing)}"}), 503)
+    return latest, None
+
+
+@bp.route("/api/prediction/germination")
+@require_auth
+def germination_prediction():
+    latest, error = _fetch_latest_prediction_sensors()
+    if error:
+        return error
 
     chance_pct = prediction.predict_germination_chance(
         temperature=latest["temperature"],
@@ -134,6 +144,16 @@ def germination_prediction():
         humidite_air=latest["air_humidity"],
     )
     return jsonify({"chance_pct": round(chance_pct, 2), "based_on": latest})
+
+
+@bp.route("/api/prediction/recommendations")
+@require_auth
+def germination_recommendations():
+    latest, error = _fetch_latest_prediction_sensors()
+    if error:
+        return error
+
+    return jsonify({"based_on": latest, "recommendations": prediction.recommend_values(latest)})
 
 
 def _is_number(value):

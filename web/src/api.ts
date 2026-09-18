@@ -165,6 +165,21 @@ export async function fetchGerminationChance(token: string): Promise<Germination
   return res.json();
 }
 
+export interface SensorRecommendation {
+  recommended_value: number;
+  predicted_chance_pct: number;
+}
+
+export interface GerminationRecommendations {
+  based_on: Record<string, number>;
+  recommendations: Record<string, SensorRecommendation>;
+}
+
+export async function fetchGerminationRecommendations(token: string): Promise<GerminationRecommendations> {
+  const res = await authedFetch(token, "/api/prediction/recommendations");
+  return res.json();
+}
+
 export async function saveAutomationRule(
   token: string,
   actuator: string,

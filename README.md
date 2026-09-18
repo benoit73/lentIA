@@ -31,7 +31,7 @@ Raspberry Pi, capteurs et réseau de neurones).
 | `ws.py`             | Routes WebSocket, une par capteur                                     |
 | `auth.py`           | Vérification des ID tokens Google (OAuth) : décorateur `require_auth` pour le REST, `verify_token` pour le WebSocket |
 | `automation.py`     | Thread de fond : évalue les règles d'automatisation toutes les ~30s   |
-| `prediction.py`     | Charge le réseau de neurones entraîné (`ia/train_model.py`) et prédit le % de chances de pousse |
+| `prediction.py`     | Charge le réseau de neurones entraîné (`ia/train_model.py`), prédit le % de chances de pousse et recommande des valeurs cibles par capteur |
 | `app.py`            | Point d'entrée : assemble l'app Flask, démarre le client MQTT et le thread d'automatisation |
 
 ### Dashboard React (`web/`)
@@ -257,6 +257,30 @@ curl -H "Authorization: Bearer $ID_TOKEN" http://localhost:5000/api/prediction/g
 Renvoie `503` si un des 4 capteurs n'a encore jamais reçu de relevé.
 
 Le dashboard affiche ce % dans un badge au centre du header (`SurvivalChanceBadge.tsx`), rafraîchi toutes les 10s, coloré selon la valeur (rouge < 33%, orange 33-66%, vert ≥ 66%) — visible sur les 4 pages du carrousel puisque le header est commun.
+
+### Valeurs recommandées par capteur
+
+`GET /api/prediction/recommendations` va plus loin que la simple
+prédiction : pour chacun des 4 capteurs utilisés par le modèle, elle balaie
+sa plage plausible (bornée au min/max observé dans le dataset
+d'entraînement, pour ne pas extrapoler au-delà de ce que le modèle a
+appris) et cherche, via `model.predict` vectorisé sur toute la grille, la
+valeur qui **maximise** la prédiction — les 3 autres capteurs restant fixés
+à leur dernier relevé. C'est une recommandation locale par capteur ("vise
+Y% d'humidité du sol dans les conditions actuelles"), pas une optimisation
+jointe sur les 4 capteurs en même temps.
+
+```bash
+curl -H "Authorization: Bearer $ID_TOKEN" http://localhost:5000/api/prediction/recommendations
+# {"based_on": {...}, "recommendations": {"soil_humidity": {"recommended_value": 59.8, "predicted_chance_pct": 70.2}, ...}}
+```
+
+Le dashboard affiche ces cibles sur chaque carte capteur concernée (badge
+« Cible IA : … », `SensorCard.tsx`), rafraîchies toutes les 30s
+(`Dashboard.tsx`) — plus espacé que le badge du header car le calcul est
+plus coûteux (balayage par capteur) et les cibles n'ont pas besoin d'être
+aussi réactives que la prédiction instantanée. Le réservoir d'eau n'entre
+pas dans le modèle et n'affiche donc pas de cible.
 
 ## Authentification (OAuth)
 

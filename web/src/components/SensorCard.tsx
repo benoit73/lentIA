@@ -13,7 +13,17 @@ function formatValue(value: number | null, unit: string) {
   return `${rounded} ${unit}`;
 }
 
-export function SensorCard({ sensor, range, live }: { sensor: SensorMeta; range: HistoryRange; live: boolean }) {
+export function SensorCard({
+  sensor,
+  range,
+  live,
+  recommendedValue,
+}: {
+  sensor: SensorMeta;
+  range: HistoryRange;
+  live: boolean;
+  recommendedValue?: number;
+}) {
   const { token } = useAuth();
   const { value: liveValue, online, receivedAt } = useSensorRealtime(sensor.key, token);
   const { points, leftEdge, rightEdge } = useLiveSeries(sensor.key, range, { live, liveValue, receivedAt });
@@ -38,6 +48,11 @@ export function SensorCard({ sensor, range, live }: { sensor: SensorMeta; range:
           <LiveStatusDot online={online} />
         </div>
       </div>
+      {recommendedValue !== undefined && (
+        <p className="mt-2 text-[11px] font-semibold text-theme-accent bg-theme-accent/10 rounded-full px-2.5 py-1 w-fit">
+          Cible IA : {formatValue(recommendedValue, sensor.unit)}
+        </p>
+      )}
       <div className="h-16 mt-4">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={points}>
