@@ -113,6 +113,13 @@ def fetch_actuator_states():
     return states
 
 
+def fetch_latest_sensor_value(sensor: str):
+    """Dernier relevé connu d'un capteur (`{"value", "created_at"}`), ou
+    `None` si ce capteur n'a encore jamais rien reçu."""
+    rows = fetch_sensor_history(sensor, limit=1)
+    return rows[0] if rows else None
+
+
 def fetch_actuator_events(
     actuator: str | None = None,
     start: str | None = None,

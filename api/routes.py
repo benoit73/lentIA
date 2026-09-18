@@ -7,8 +7,13 @@ from flask import Blueprint, g, jsonify, request
 
 import db
 import mqtt_ingest
+import prediction
 from auth import require_auth
 from config import ACTUATOR_FIELDS, SENSOR_FIELDS
+
+# Capteurs utilisés par le modèle de prédiction (voir ia/train_model.py),
+# dans l'ordre attendu par prediction.predict_germination_chance.
+PREDICTION_SENSORS = ("temperature", "soil_humidity", "luminosity", "air_humidity")
 
 _HHMM_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 
@@ -105,6 +110,30 @@ def toggle_actuator(actuator):
     db.insert_actuator_event(actuator, state, g.user.get("email"), source="manual")
     mqtt_ingest.publish_actuator_command(actuator, state)
     return jsonify({"actuator": actuator, "on": state})
+
+
+@bp.route("/api/prediction/germination")
+@require_auth
+def germination_prediction():
+    latest = {}
+    missing = []
+    for sensor in PREDICTION_SENSORS:
+        reading = db.fetch_latest_sensor_value(sensor)
+        if reading is None:
+            missing.append(sensor)
+        else:
+            latest[sensor] = reading["value"]
+
+    if missing:
+        return jsonify({"error": f"pas encore de relevé pour : {', '.join(missing)}"}), 503
+
+    chance_pct = prediction.predict_germination_chance(
+        temperature=latest["temperature"],
+        humidite_sol=latest["soil_humidity"],
+        luminosite=latest["luminosity"],
+        humidite_air=latest["air_humidity"],
+    )
+    return jsonify({"chance_pct": round(chance_pct, 2), "based_on": latest})
 
 
 def _is_number(value):

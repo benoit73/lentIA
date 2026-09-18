@@ -31,6 +31,7 @@ Raspberry Pi, capteurs et réseau de neurones).
 | `ws.py`             | Routes WebSocket, une par capteur                                     |
 | `auth.py`           | Vérification des ID tokens Google (OAuth) : décorateur `require_auth` pour le REST, `verify_token` pour le WebSocket |
 | `automation.py`     | Thread de fond : évalue les règles d'automatisation toutes les ~30s   |
+| `prediction.py`     | Charge le réseau de neurones entraîné (`ia/train_model.py`) et prédit le % de chances de pousse |
 | `app.py`            | Point d'entrée : assemble l'app Flask, démarre le client MQTT et le thread d'automatisation |
 
 ### Dashboard React (`web/`)
@@ -208,6 +209,43 @@ curl -X PUT -H "Authorization: Bearer $ID_TOKEN" -H "Content-Type: application/j
   -d '{"enabled": true, "rule_type": "threshold", "config": {"sensor": "temperature", "comparator": "below", "threshold": 18, "action_mode": "until_target", "target_value": 21}}' \
   http://localhost:5000/api/automation/rules/heating
 ```
+
+## Prédiction des chances de pousse (IA)
+
+`ia/` contient un dataset simulé (`dataset_germination_lentilles.csv` — 25
+bacs suivis heure par heure sur 8 jours : température, humidité du sol,
+luminosité, humidité de l'air, et le `chances_pousse_pct` observé) et le
+script `train_model.py` qui entraîne un réseau de neurones (scikit-learn
+`MLPRegressor`, 2 couches cachées 32/16, normalisation intégrée) à prédire
+`chances_pousse_pct` à partir des 4 relevés capteur.
+
+```bash
+cd ia
+pip install -r requirements.txt
+python train_model.py
+```
+
+Le split train/test se fait **par bac** (pas par ligne) : les relevés d'un
+même bac sont très corrélés (même trajectoire heure par heure), un split
+aléatoire ligne par ligne ferait fuiter le même bac dans train et test et
+surestimerait la performance. Le script affiche la MAE/R² sur des bacs
+jamais vus à l'entraînement (~8 points d'erreur moyenne, R² ~0.85), puis
+sauvegarde le modèle entraîné dans `api/model/germination_model.joblib` —
+c'est ce fichier (suivi par git) que l'API charge au démarrage
+(`api/prediction.py`), donc pas besoin de ré-entraîner pour déployer ;
+relance `train_model.py` et redéploie l'API seulement si tu changes le
+dataset ou le modèle.
+
+`GET /api/prediction/germination` (authentifié comme le reste de l'API)
+prend automatiquement le **dernier relevé connu** de chaque capteur en base
+et renvoie la prédiction :
+
+```bash
+curl -H "Authorization: Bearer $ID_TOKEN" http://localhost:5000/api/prediction/germination
+# {"chance_pct": 68.54, "based_on": {"temperature": 25.0, "soil_humidity": 70.0, "luminosity": 400.0, "air_humidity": 55.0}}
+```
+
+Renvoie `503` si un des 4 capteurs n'a encore jamais reçu de relevé.
 
 ## Authentification (OAuth)
 
