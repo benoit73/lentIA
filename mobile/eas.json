@@ -1,0 +1,32 @@
+{
+  "cli": {
+    "version": ">= 16.0.0",
+    "appVersionSource": "local"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "http://98.66.161.191",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "619348188572-94es47vq0tku6tj3u5vfs98c07doe6v6.apps.googleusercontent.com"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "http://98.66.161.191",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "619348188572-94es47vq0tku6tj3u5vfs98c07doe6v6.apps.googleusercontent.com"
+      }
+    },
+    "production": {
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "http://98.66.161.191",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "619348188572-94es47vq0tku6tj3u5vfs98c07doe6v6.apps.googleusercontent.com"
+      }
+    }
+  }
+}

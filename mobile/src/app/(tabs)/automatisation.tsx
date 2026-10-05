@@ -1,0 +1,329 @@
+import { useEffect, useState } from "react";
+import { View } from "react-native";
+import {
+  ApiError,
+  fetchAutomationRules,
+  saveAutomationRule,
+  type AutomationRule,
+  type ScheduleConfig,
+  type ScheduleThresholdConfig,
+  type ThresholdConfig,
+  type TimeRange,
+} from "../../api";
+import { useAuth } from "../../auth/AuthContext";
+import { NumberField } from "../../components/automation/fields";
+import { FlexibleActuatorCard, RuleHeader, SaveRow, type FlexibleForm } from "../../components/automation/FlexibleActuatorCard";
+import { ScheduleRangesEditor } from "../../components/automation/ScheduleRangesEditor";
+import { Page } from "../../components/Page";
+import { Card, SectionTitle, T } from "../../components/ui";
+import { colors } from "../../theme";
+
+interface LightForm {
+  enabled: boolean;
+  ranges: TimeRange[];
+  minLuminosity: string; // lux — s'allume si la luminosité mesurée ne dépasse pas ce seuil
+}
+
+const DEFAULT_LIGHT: LightForm = {
+  enabled: false,
+  ranges: [{ start: "06:00", end: "22:00" }],
+  minLuminosity: "150",
+};
+
+const DEFAULT_WATERING: FlexibleForm = {
+  enabled: false,
+  ruleType: "threshold",
+  ranges: [{ start: "07:00", end: "07:05" }],
+  threshold: {
+    sensor: "soil_humidity",
+    comparator: "below",
+    threshold: "35",
+    actionMode: "duration",
+    durationMinutes: "5",
+    targetValue: "55",
+  },
+};
+
+const DEFAULT_VENTILATION: FlexibleForm = {
+  enabled: false,
+  ruleType: "threshold",
+  ranges: [{ start: "12:00", end: "14:00" }],
+  threshold: {
+    sensor: "temperature",
+    comparator: "above",
+    threshold: "28",
+    actionMode: "duration",
+    durationMinutes: "10",
+    targetValue: "24",
+  },
+};
+
+const DEFAULT_HEATING: FlexibleForm = {
+  enabled: false,
+  ruleType: "threshold",
+  ranges: [{ start: "20:00", end: "06:00" }],
+  threshold: {
+    sensor: "temperature",
+    comparator: "below",
+    threshold: "18",
+    actionMode: "duration",
+    durationMinutes: "15",
+    targetValue: "21",
+  },
+};
+
+// Une règle en base peut venir d'un ancien schéma (avant la refonte
+// plage/seuil multi-plages) : on retombe sur les valeurs par défaut plutôt
+// que de planter si la forme ne correspond pas à ce qu'on attend.
+function isValidRanges(ranges: unknown): ranges is TimeRange[] {
+  return (
+    Array.isArray(ranges) &&
+    ranges.length > 0 &&
+    ranges.every((r) => r && typeof r === "object" && typeof (r as TimeRange).start === "string" && typeof (r as TimeRange).end === "string")
+  );
+}
+
+function isValidThresholdConfig(config: unknown): config is ThresholdConfig {
+  if (!config || typeof config !== "object") return false;
+  const c = config as ThresholdConfig;
+  return (
+    typeof c.sensor === "string" &&
+    (c.comparator === "above" || c.comparator === "below") &&
+    typeof c.threshold === "number" &&
+    (c.action_mode === "duration" || c.action_mode === "until_target")
+  );
+}
+
+function isValidScheduleThresholdConfig(config: unknown): config is ScheduleThresholdConfig {
+  if (!config || typeof config !== "object") return false;
+  const c = config as ScheduleThresholdConfig;
+  return (
+    isValidRanges(c.ranges) &&
+    typeof c.sensor === "string" &&
+    (c.comparator === "above" || c.comparator === "below") &&
+    typeof c.threshold === "number"
+  );
+}
+
+function toLightForm(rule: AutomationRule | undefined, fallback: LightForm): LightForm {
+  if (!rule || rule.rule_type !== "schedule_threshold") return fallback;
+  if (!isValidScheduleThresholdConfig(rule.config)) return fallback;
+  const config = rule.config;
+  return { enabled: rule.enabled, ranges: config.ranges, minLuminosity: String(config.threshold) };
+}
+
+function toFlexibleForm(rule: AutomationRule | undefined, fallback: FlexibleForm): FlexibleForm {
+  if (!rule) return fallback;
+  if (rule.rule_type === "schedule") {
+    const config = rule.config as ScheduleConfig;
+    if (!isValidRanges(config?.ranges)) return fallback;
+    return { ...fallback, enabled: rule.enabled, ruleType: "schedule", ranges: config.ranges };
+  }
+  if (!isValidThresholdConfig(rule.config)) return fallback;
+  const config = rule.config;
+  return {
+    ...fallback,
+    enabled: rule.enabled,
+    ruleType: "threshold",
+    threshold: {
+      sensor: config.sensor,
+      comparator: config.comparator,
+      threshold: String(config.threshold),
+      actionMode: config.action_mode,
+      durationMinutes: config.duration_minutes !== undefined ? String(config.duration_minutes) : fallback.threshold.durationMinutes,
+      targetValue: config.target_value !== undefined ? String(config.target_value) : fallback.threshold.targetValue,
+    },
+  };
+}
+
+export default function AutomationPage() {
+  const { token, handleUnauthorized } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [lightForm, setLightForm] = useState<LightForm>(DEFAULT_LIGHT);
+  const [wateringForm, setWateringForm] = useState<FlexibleForm>(DEFAULT_WATERING);
+  const [ventilationForm, setVentilationForm] = useState<FlexibleForm>(DEFAULT_VENTILATION);
+  const [heatingForm, setHeatingForm] = useState<FlexibleForm>(DEFAULT_HEATING);
+  const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [messages, setMessages] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (!token) return;
+    fetchAutomationRules(token)
+      .then((rules) => {
+        setLightForm(toLightForm(rules.light, DEFAULT_LIGHT));
+        setWateringForm(toFlexibleForm(rules.watering, DEFAULT_WATERING));
+        setVentilationForm(toFlexibleForm(rules.ventilation, DEFAULT_VENTILATION));
+        setHeatingForm(toFlexibleForm(rules.heating, DEFAULT_HEATING));
+      })
+      .catch((err) => {
+        if (err instanceof ApiError && err.status === 401) handleUnauthorized();
+      })
+      .finally(() => setLoading(false));
+  }, [token, handleUnauthorized]);
+
+  async function saveLight() {
+    if (!token) return;
+    const threshold = Number(lightForm.minLuminosity);
+    if (!Number.isFinite(threshold) || threshold < 0) {
+      setMessages((m) => ({ ...m, light: "Seuil de luminosité invalide." }));
+      return;
+    }
+
+    setSavingKey("light");
+    setMessages((m) => ({ ...m, light: "" }));
+    try {
+      await saveAutomationRule(token, "light", {
+        enabled: lightForm.enabled,
+        rule_type: "schedule_threshold",
+        config: { ranges: lightForm.ranges, sensor: "luminosity", comparator: "below", threshold },
+      });
+      setMessages((m) => ({ ...m, light: "Enregistré." }));
+    } catch (err) {
+      setMessages((m) => ({
+        ...m,
+        light: err instanceof ApiError ? err.message : "Échec de l'enregistrement.",
+      }));
+    } finally {
+      setSavingKey(null);
+    }
+  }
+
+  async function saveFlexible(actuator: string, form: FlexibleForm) {
+    if (!token) return;
+
+    let config: ScheduleConfig | ThresholdConfig;
+    if (form.ruleType === "schedule") {
+      config = { ranges: form.ranges };
+    } else {
+      const threshold = Number(form.threshold.threshold);
+      if (!Number.isFinite(threshold)) {
+        setMessages((m) => ({ ...m, [actuator]: "Seuil invalide." }));
+        return;
+      }
+      if (form.threshold.actionMode === "duration") {
+        const durationMinutes = Number(form.threshold.durationMinutes);
+        if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) {
+          setMessages((m) => ({ ...m, [actuator]: "Durée invalide." }));
+          return;
+        }
+        config = {
+          sensor: form.threshold.sensor,
+          comparator: form.threshold.comparator,
+          threshold,
+          action_mode: "duration",
+          duration_minutes: durationMinutes,
+        };
+      } else {
+        const targetValue = Number(form.threshold.targetValue);
+        if (!Number.isFinite(targetValue)) {
+          setMessages((m) => ({ ...m, [actuator]: "Valeur cible invalide." }));
+          return;
+        }
+        config = {
+          sensor: form.threshold.sensor,
+          comparator: form.threshold.comparator,
+          threshold,
+          action_mode: "until_target",
+          target_value: targetValue,
+        };
+      }
+    }
+
+    setSavingKey(actuator);
+    setMessages((m) => ({ ...m, [actuator]: "" }));
+    try {
+      await saveAutomationRule(token, actuator, { enabled: form.enabled, rule_type: form.ruleType, config });
+      setMessages((m) => ({ ...m, [actuator]: "Enregistré." }));
+    } catch (err) {
+      setMessages((m) => ({
+        ...m,
+        [actuator]: err instanceof ApiError ? err.message : "Échec de l'enregistrement.",
+      }));
+    } finally {
+      setSavingKey(null);
+    }
+  }
+
+  return (
+    <Page>
+      <View style={{ gap: 4 }}>
+        <SectionTitle>Automatisation</SectionTitle>
+        <T size={12} color={colors.textSecondary}>
+          Ces règles sont vérifiées côté serveur toutes les ~30 secondes et déclenchent les mêmes commandes MQTT qu'un
+          interrupteur manuel — visibles dans le journal avec le mode « Auto ». Si tu changes un actionneur à la main
+          pendant qu'une règle est active, la règle peut le reprendre au prochain contrôle : désactive-la si tu veux
+          garder la main.
+        </T>
+      </View>
+
+      {loading ? (
+        <T size={13} color={colors.textSecondary}>
+          Chargement…
+        </T>
+      ) : (
+        <>
+          {/* Lumière : plage(s) horaire(s) + seuil de luminosité (allumage d'appoint) */}
+          <Card>
+            <RuleHeader
+              title="Lumière"
+              description="Dans les plages horaires ci-dessous, s'allume si la luminosité ne dépasse pas le seuil"
+              enabled={lightForm.enabled}
+              onToggle={(next) => setLightForm((f) => ({ ...f, enabled: next }))}
+            />
+
+            <ScheduleRangesEditor ranges={lightForm.ranges} onChange={(ranges) => setLightForm((f) => ({ ...f, ranges }))} />
+
+            <View style={{ marginTop: 16 }}>
+              <NumberField
+                label="Seuil de luminosité (lux) — moyenne sur les 10 dernières minutes"
+                value={lightForm.minLuminosity}
+                onChange={(minLuminosity) => setLightForm((f) => ({ ...f, minLuminosity }))}
+              />
+            </View>
+
+            <SaveRow onSave={saveLight} saving={savingKey === "light"} message={messages.light} />
+          </Card>
+
+          <FlexibleActuatorCard
+            title="Arrosage"
+            description="Seuil sur l'humidité du sol, ou plage(s) horaire(s)"
+            form={wateringForm}
+            onChange={setWateringForm}
+            onSave={() => saveFlexible("watering", wateringForm)}
+            saving={savingKey === "watering"}
+            message={messages.watering}
+            sensorOptions={[{ value: "soil_humidity", label: "Humidité du sol" }]}
+            unit="%"
+          />
+
+          <FlexibleActuatorCard
+            title="Ventilation"
+            description="Seuil sur la température ou l'humidité de l'air, ou plage(s) horaire(s)"
+            form={ventilationForm}
+            onChange={setVentilationForm}
+            onSave={() => saveFlexible("ventilation", ventilationForm)}
+            saving={savingKey === "ventilation"}
+            message={messages.ventilation}
+            sensorOptions={[
+              { value: "temperature", label: "Température" },
+              { value: "air_humidity", label: "Humidité de l'air" },
+            ]}
+            unit={ventilationForm.threshold.sensor === "temperature" ? "°C" : "%"}
+          />
+
+          <FlexibleActuatorCard
+            title="Chauffage"
+            description="Seuil sur la température, ou plage(s) horaire(s)"
+            form={heatingForm}
+            onChange={setHeatingForm}
+            onSave={() => saveFlexible("heating", heatingForm)}
+            saving={savingKey === "heating"}
+            message={messages.heating}
+            sensorOptions={[{ value: "temperature", label: "Température" }]}
+            unit="°C"
+          />
+        </>
+      )}
+    </Page>
+  );
+}

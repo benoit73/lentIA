@@ -58,6 +58,20 @@ Raspberry Pi, capteurs et réseau de neurones).
 | `src/api.ts`                    | Client API (fetch + URL WebSocket), toujours en chemins relatifs |
 | `nginx.conf`                    | Sert le build statique + relaie `/api` et `/ws` vers `api:5000`  |
 
+### Application Android (`mobile/`)
+
+Même dashboard en application **React Native** ([Expo](https://expo.dev),
+SDK 57) — voir [Application Android](#application-android-react-native).
+
+| Dossier/fichier                  | Rôle                                                            |
+|------------------------------------|------------------------------------------------------------------|
+| `src/app/`                          | Routes (Expo Router) : `_layout.tsx` (polices, session, routes protégées), `sign-in.tsx`, `(tabs)/` (les 5 pages), `sensors/[sensor].tsx` (détail capteur) |
+| `src/app/(tabs)/_layout.tsx`        | Header fixe (`TopBar`) + pages Dashboard/Historique/Contrôle/Journal/Automatisation qu'on fait défiler au doigt, onglets en bas — l'équivalent mobile du carrousel 3D |
+| `src/auth/`                         | Connexion Google native (`@react-native-google-signin/google-signin`), session en SecureStore, renouvellement silencieux du token |
+| `src/components/`                   | Mêmes composants que le web (widgets, cartes capteur, actionneurs, journal, éditeurs de règles), en composants React Native |
+| `src/components/chart.ts`, `Sparkline.tsx`, `SensorChart.tsx` | Courbes en SVG (remplacent Recharts) : axe temporel réel, ligne cassée sur les trous, valeur au toucher |
+| `src/hooks/`, `api.ts`, `chartGaps.ts`, `format.ts` | Repris du web ; `api.ts` utilise des URL absolues (`EXPO_PUBLIC_API_BASE_URL`) |
+
 ## Format des messages MQTT
 
 Un topic par capteur, sous le préfixe `lentia/sensors/` :
@@ -437,6 +451,70 @@ Console si tu développes ainsi.
 
 Pour arrêter : `docker compose down` (ajouter `-v` pour aussi supprimer les
 données stockées).
+
+## Application Android (React Native)
+
+`mobile/` est une app Expo qui reprend toutes les pages du dashboard :
+Dashboard (widgets), Historique, Contrôle, Journal, Automatisation et le
+détail de chaque capteur, avec le même temps réel (WebSocket) et le même
+polling. Elle parle directement à l'API de la VM : React Native n'a pas de
+CORS, l'API n'a donc rien à changer.
+
+Différences avec le web :
+
+- **Navigation** : les 5 pages défilent au doigt avec des onglets en bas
+  (pas de cylindre 3D) ; le header reste fixe.
+- **Connexion Google native** (Credential Manager / Google Play Services),
+  le bouton GIS du web ne fonctionnant pas dans une app. L'ID token a pour
+  audience le Client ID **web** : l'API le vérifie comme celui du dashboard.
+- **Session persistante** : le token est gardé en SecureStore et renouvelé
+  silencieusement à son expiration (1 h) — pas besoin de se reconnecter
+  chaque heure ni à chaque lancement.
+- **Sélecteurs natifs** de date/heure pour les plages personnalisées et les
+  plages horaires des règles. Le compte et la déconnexion sont derrière
+  l'avatar du header.
+- **HTTP en clair** autorisé (`expo-build-properties` →
+  `usesCleartextTraffic`), la VM n'ayant pas de certificat TLS.
+
+### Configuration
+
+- `mobile/.env` (non versionné, modèle dans `mobile/.env.example`) pour
+  `npx expo start` / `npx expo run:android` : `EXPO_PUBLIC_API_BASE_URL`
+  (`http://98.66.161.191`) et `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` (le
+  `GOOGLE_CLIENT_ID` du `.env` racine).
+- `mobile/eas.json` contient les mêmes valeurs pour les builds EAS (le
+  Client ID n'est pas un secret : il est déjà dans le bundle du dashboard).
+- **Google Cloud Console** (une fois) : dans le même projet que le Client ID
+  web, créer un **ID client OAuth de type Android** avec le nom de package
+  `com.lentia.app` et l'empreinte **SHA-1** du certificat qui signe l'APK :
+  - build local : `cd mobile/android && ./gradlew signingReport` (après un
+    premier `npx expo run:android`) ;
+  - build EAS : `npx eas-cli@latest credentials -p android`.
+
+  Un SHA-1 par certificat (debug, EAS, Play Store). Sans ce client, la
+  connexion échoue avec `DEVELOPER_ERROR`.
+
+### Compiler et lancer
+
+La connexion Google utilise du code natif : l'app ne tourne **pas dans Expo
+Go**, il faut un *development build*. Deux options :
+
+```bash
+cd mobile
+npm install
+cp .env.example .env              # renseigner le Client ID web
+
+# Option 1 — dans le cloud (pas besoin d'Android Studio, compte Expo gratuit)
+npx eas-cli@latest build -p android --profile preview      # APK installable
+npx eas-cli@latest build -p android --profile development  # APK de dev (+ npx expo start)
+
+# Option 2 — en local (Android Studio installé, téléphone en USB ou émulateur)
+npx expo run:android
+```
+
+Les dossiers natifs `android/`/`ios/` sont générés (`npx expo prebuild`) et
+non versionnés : la config native passe par `app.json` et les plugins.
+Vérifications : `npm run typecheck` et `npx expo-doctor`.
 
 ## API REST
 
