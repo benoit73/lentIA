@@ -1,9 +1,5 @@
 export const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
-// Vide sur le web (chemins relatifs). Renseignée pour le build Android, ex.
-// http://98.66.161.191 — sans slash final.
-export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/+$/, "");
-
 // Au-delà de ce délai sans message MQTT pour un capteur : considéré hors
 // ligne (badge du dashboard) et, côté historique, un trou visible dans la
 // courbe plutôt qu'une ligne continue qui laisserait croire à des données.

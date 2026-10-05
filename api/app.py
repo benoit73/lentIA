@@ -10,12 +10,11 @@ Rôles répartis entre modules :
 - automation.py   : évaluation périodique des règles d'automatisation
 """
 
-from flask import Flask, request, send_from_directory
+from flask import Flask, send_from_directory
 
 import automation
 import mqtt_ingest
 import ws
-from config import CORS_ORIGINS
 from routes import bp as routes_bp
 
 
@@ -23,18 +22,6 @@ def create_app():
     app = Flask(__name__, static_folder="static", template_folder="templates")
     app.register_blueprint(routes_bp)
     ws.register(app)
-
-    # CORS pour l'app Android. Les preflights OPTIONS sont répondus
-    # automatiquement par Flask, sans passer par require_auth.
-    @app.after_request
-    def add_cors_headers(response):
-        origin = request.headers.get("Origin")
-        if origin in CORS_ORIGINS:
-            response.headers["Access-Control-Allow-Origin"] = origin
-            response.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type"
-            response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, OPTIONS"
-            response.vary.add("Origin")
-        return response
 
     @app.route("/")
     def index():
