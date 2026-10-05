@@ -1,7 +1,10 @@
-// Client API : toujours des chemins relatifs (/api/..., /ws/...) — en dev,
-// vite.config.ts les proxifie vers l'API Flask locale ; en prod (Docker),
-// c'est nginx qui fait ce travail (voir web/nginx.conf). Le navigateur ne
-// connaît donc jamais l'adresse réelle de l'API.
+// Client API : sur le web, toujours des chemins relatifs (/api/..., /ws/...) —
+// en dev, vite.config.ts les proxifie vers l'API Flask locale ; en prod
+// (Docker), c'est nginx qui fait ce travail (voir web/nginx.conf). Seule
+// l'app Android (Capacitor), servie depuis http://localhost, a besoin d'une
+// adresse absolue : VITE_API_BASE_URL (voir web/.env.android).
+
+import { API_BASE_URL } from "./config";
 
 export interface HistoryPoint {
   value: number | null;
@@ -18,7 +21,7 @@ export class ApiError extends Error {
 }
 
 async function authedFetch(token: string, path: string, init: RequestInit = {}): Promise<Response> {
-  const res = await fetch(path, {
+  const res = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     headers: { ...(init.headers ?? {}), Authorization: `Bearer ${token}` },
   });
@@ -58,8 +61,8 @@ export async function fetchSensorHistory(
 }
 
 export function sensorWebSocketUrl(sensor: string, token: string): string {
-  const protocol = location.protocol === "https:" ? "wss" : "ws";
-  return `${protocol}://${location.host}/ws/sensors/${sensor}?token=${encodeURIComponent(token)}`;
+  const base = API_BASE_URL || `${location.protocol}//${location.host}`;
+  return `${base.replace(/^http/, "ws")}/ws/sensors/${sensor}?token=${encodeURIComponent(token)}`;
 }
 
 export interface ActuatorState {

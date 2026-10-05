@@ -38,7 +38,7 @@ Raspberry Pi, capteurs et réseau de neurones).
 
 | Dossier/fichier              | Rôle                                                            |
 |--------------------------------|------------------------------------------------------------------|
-| `src/auth/`                     | Connexion Google Sign-In (`AuthContext`, bouton, garde `RequireAuth`) |
+| `src/auth/`                     | Connexion Google Sign-In (`AuthContext`, bouton, garde `RequireAuth`) — GIS sur le web, Credential Manager natif sur Android |
 | `src/pages/CarouselShell.tsx`   | Header fixe (`TopBar`, hors animation) + fait tourner Dashboard/Historique/Contrôle/Journal/Automatisation dans le cylindre 3D (`PageCylinder`) |
 | `src/pages/Dashboard.tsx`       | Page d'accueil : grille de widgets (réservoir, éclairage, survie IA, climat, sol, actionneurs, prochaines actions) |
 | `src/pages/HistoryPage.tsx`     | Grille des 5 capteurs avec courbes + sélecteur de plage (l'ancienne page d'accueil) |
@@ -55,7 +55,8 @@ Raspberry Pi, capteurs et réseau de neurones).
 | `src/components/JournalPreview.tsx` | Aperçu des dernières actions dans la page Contrôle, lien vers le journal complet |
 | `src/components/CameraPanel.tsx`   | Emplacement retour caméra (placeholder tant qu'il n'y a pas de caméra) |
 | `src/hooks/`                    | `useSensorHistory`/`useSensorRealtime`/`useLiveSeries` (capteurs), `usePolling` (actionneurs/journal) |
-| `src/api.ts`                    | Client API (fetch + URL WebSocket), toujours en chemins relatifs |
+| `src/api.ts`                    | Client API (fetch + URL WebSocket) : chemins relatifs sur le web, préfixés par `VITE_API_BASE_URL` dans l'app Android |
+| `capacitor.config.ts`, `android/` | App Android (Capacitor) — voir [Application Android](#application-android-capacitor) |
 | `nginx.conf`                    | Sert le build statique + relaie `/api` et `/ws` vers `api:5000`  |
 
 ## Format des messages MQTT
@@ -438,6 +439,62 @@ Console si tu développes ainsi.
 Pour arrêter : `docker compose down` (ajouter `-v` pour aussi supprimer les
 données stockées).
 
+## Application Android (Capacitor)
+
+Le dashboard React est aussi emballé en application Android avec
+[Capacitor](https://capacitorjs.com) : même code (`web/src`), affiché dans
+une WebView. Le projet Android natif est dans `web/android/`.
+
+Différences avec le web :
+
+- **Adresse de l'API** : pas de nginx devant l'app, elle appelle l'API de la
+  VM en direct via `VITE_API_BASE_URL` (`web/.env.android`,
+  `http://98.66.161.191`). Le web garde ses chemins relatifs.
+- **CORS** : l'app est servie depuis `http://localhost` dans la WebView, donc
+  l'API Flask renvoie les en-têtes CORS pour les origines de `CORS_ORIGINS`
+  (défaut `http://localhost,https://localhost,capacitor://localhost`).
+- **HTTP en clair** : la VM n'a pas de certificat TLS, l'app est donc servie
+  en `http` (`androidScheme`) et autorise le trafic en clair
+  (`usesCleartextTraffic`). À repasser en HTTPS dès que la VM en a un.
+- **Connexion Google** : Google bloque le bouton GIS dans les WebView. Sur
+  Android, la connexion passe par le plugin `@capgo/capacitor-social-login`
+  (Credential Manager), qui renvoie un ID token dont l'audience est le
+  Client ID **web** — l'API le vérifie exactement comme celui du dashboard.
+- **Session** : le token est gardé en `localStorage` (et non
+  `sessionStorage`) pour survivre à la fermeture de l'app. Il expire quand
+  même au bout d'1 h, comme sur le web : il faut alors se reconnecter.
+
+### Configuration Google Cloud (une fois)
+
+Dans le **même projet** que le Client ID web, créer un **ID client OAuth**
+de type **Android** :
+
+- Nom du package : `com.lentia.app`
+- Empreinte SHA-1 du certificat qui signe l'APK. Pour la clé de debug
+  d'Android Studio : `cd web/android && ./gradlew signingReport` (ou
+  `keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android`).
+  Une clé de release (Play Store) demande un second client Android avec son
+  propre SHA-1.
+
+Ce client Android n'est référencé nulle part dans le code : il sert juste à
+autoriser l'APK. Si l'écran de consentement est en mode « Test », ajoute les
+comptes testeurs. Le téléphone doit avoir un compte Google configuré.
+
+### Compiler et lancer
+
+Prérequis : [Android Studio](https://developer.android.com/studio) (fournit
+le SDK Android et le JDK).
+
+```bash
+cd web
+npm install
+npm run build:android     # build Vite en mode "android" + npx cap sync android
+npx cap open android      # ouvre le projet dans Android Studio → ▶ Run
+```
+
+À refaire après chaque modification du code React : l'app embarque le
+build, elle ne se met pas à jour toute seule comme le site.
+
 ## API REST
 
 Toutes les routes sauf `/api/health` exigent un header
@@ -664,7 +721,8 @@ montage), rien d'autre à changer côté logiciel — le Pico écoute déjà
 - Les identifiants Postgres (`lentia` / `lentia`) sont volontairement simples
   pour un projet scolaire ; à changer si le stack est exposé publiquement.
 - Le token OAuth du dashboard est stocké en `sessionStorage` (effacé à la
-  fermeture de l'onglet, pas de refresh token) : suffisant pour ce projet,
+  fermeture de l'onglet, pas de refresh token ; `localStorage` dans l'app
+  Android) : suffisant pour ce projet,
   mais reste vulnérable en cas de XSS, comme tout stockage accessible en JS.
 - `ALLOWED_EMAILS` vide accepte n'importe quel compte Google valide — mets-y
   au moins ta propre adresse avant de déployer ailleurs qu'en local.

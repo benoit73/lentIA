@@ -54,3 +54,14 @@ ALLOWED_EMAILS = {
     for email in os.environ.get("ALLOWED_EMAILS", "").split(",")
     if email.strip()
 }
+
+# Origines autorisées à appeler l'API en cross-origin (CORS). Le dashboard web
+# passe par nginx (même origine) et n'en a pas besoin : c'est l'app Android
+# (Capacitor), servie depuis http://localhost dans sa WebView, qui l'exige.
+CORS_ORIGINS = {
+    origin.strip()
+    for origin in os.environ.get(
+        "CORS_ORIGINS", "http://localhost,https://localhost,capacitor://localhost"
+    ).split(",")
+    if origin.strip()
+}
