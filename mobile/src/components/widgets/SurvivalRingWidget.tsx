@@ -62,68 +62,76 @@ export function SurvivalRingWidget({ chancePct, recommendations, delayMs = 0 }: 
 
   return (
     <WidgetCard title="Chances de survie" subtitle="Prédiction du réseau de neurones" delayMs={delayMs}>
-      <View style={styles.ringWrap}>
-        <Svg width={144} height={144} viewBox="0 0 140 140" style={{ transform: [{ rotate: "-90deg" }] }}>
-          <Circle cx="70" cy="70" r={RADIUS} fill="none" stroke="#E2E8F0" strokeWidth={13} />
-          <Circle
-            cx="70"
-            cy="70"
-            r={RADIUS}
-            fill="none"
-            stroke={color}
-            strokeWidth={13}
-            strokeLinecap="round"
-            strokeDasharray={CIRCUMFERENCE}
-            strokeDashoffset={CIRCUMFERENCE * (1 - (chancePct === null ? 0 : pct / 100))}
-          />
-        </Svg>
-        <View style={styles.ringCenter}>
-          <T weight="extrabold" size={30} color={color} style={tabularNums}>
-            {chancePct === null ? "--" : `${Math.round(pct)}%`}
-          </T>
-          <T weight="bold" size={10} color={colors.textMuted} style={{ textTransform: "uppercase", letterSpacing: 0.5 }}>
-            de pousse
-          </T>
+      <View style={styles.body}>
+        <View style={styles.ringWrap}>
+          <Svg width={112} height={112} viewBox="0 0 140 140" style={{ transform: [{ rotate: "-90deg" }] }}>
+            <Circle cx="70" cy="70" r={RADIUS} fill="none" stroke="#E2E8F0" strokeWidth={13} />
+            <Circle
+              cx="70"
+              cy="70"
+              r={RADIUS}
+              fill="none"
+              stroke={color}
+              strokeWidth={13}
+              strokeLinecap="round"
+              strokeDasharray={CIRCUMFERENCE}
+              strokeDashoffset={CIRCUMFERENCE * (1 - (chancePct === null ? 0 : pct / 100))}
+            />
+          </Svg>
+          <View style={styles.ringCenter}>
+            <T weight="extrabold" size={24} color={color} style={tabularNums}>
+              {chancePct === null ? "--" : `${Math.round(pct)}%`}
+            </T>
+            <T
+              weight="bold"
+              size={9}
+              color={colors.textMuted}
+              style={{ textTransform: "uppercase", letterSpacing: 0.5 }}
+            >
+              de pousse
+            </T>
+          </View>
         </View>
-      </View>
 
-      <View style={{ marginTop: 16, gap: 8 }}>
-        {advice.length === 0 ? (
-          <T size={12} color={colors.textSecondary} style={{ textAlign: "center" }}>
-            {recommendations ? "Conditions déjà proches de l'optimum." : "En attente de relevés."}
-          </T>
-        ) : (
-          advice.map((item) => {
-            const increase = item.target > item.current;
-            return (
-              <View key={item.key} style={styles.advice}>
-                <View style={[styles.arrow, { backgroundColor: increase ? colors.emerald100 : colors.blue100 }]}>
-                  {increase ? <ArrowUpIcon color={colors.emerald600} /> : <ArrowDownIcon color={colors.blue600} />}
-                </View>
-                <T size={11} color={colors.textSecondary} style={{ flex: 1, lineHeight: 15 }}>
-                  <T weight="bold" size={11}>
-                    {item.label}
-                  </T>{" "}
-                  : vise{" "}
-                  <T weight="bold" size={11} style={tabularNums}>
-                    {fr(item.target)} {item.unit}
-                  </T>{" "}
-                  <T weight="bold" size={11} color={colors.emerald600} style={tabularNums}>
-                    +{Math.round(item.gain)} pts
+        <View style={{ flex: 1, minWidth: 0, gap: 8 }}>
+          {advice.length === 0 ? (
+            <T size={12} color={colors.textSecondary}>
+              {recommendations ? "Conditions déjà proches de l'optimum." : "En attente de relevés."}
+            </T>
+          ) : (
+            advice.map((item) => {
+              const increase = item.target > item.current;
+              return (
+                <View key={item.key} style={styles.advice}>
+                  <View style={[styles.arrow, { backgroundColor: increase ? colors.emerald100 : colors.blue100 }]}>
+                    {increase ? <ArrowUpIcon color={colors.emerald600} /> : <ArrowDownIcon color={colors.blue600} />}
+                  </View>
+                  <T size={11} color={colors.textSecondary} style={{ flex: 1, lineHeight: 15 }}>
+                    <T weight="bold" size={11}>
+                      {item.label}
+                    </T>{" "}
+                    : vise{" "}
+                    <T weight="bold" size={11} style={tabularNums}>
+                      {fr(item.target)} {item.unit}
+                    </T>{" "}
+                    <T weight="bold" size={11} color={colors.emerald600} style={tabularNums}>
+                      +{Math.round(item.gain)} pts
+                    </T>
+                    {"\n"}moy. 24 h : {fr(item.current)} {item.unit}
                   </T>
-                  {"\n"}moy. 24 h : {fr(item.current)} {item.unit}
-                </T>
-              </View>
-            );
-          })
-        )}
+                </View>
+              );
+            })
+          )}
+        </View>
       </View>
     </WidgetCard>
   );
 }
 
 const styles = StyleSheet.create({
-  ringWrap: { marginTop: 12, alignSelf: "center", width: 144, height: 144 },
+  body: { marginTop: 14, flexDirection: "row", alignItems: "center", gap: 14 },
+  ringWrap: { width: 112, height: 112 },
   ringCenter: { ...StyleSheet.absoluteFill, alignItems: "center", justifyContent: "center" },
   advice: {
     flexDirection: "row",
@@ -131,7 +139,7 @@ const styles = StyleSheet.create({
     gap: 8,
     borderRadius: 12,
     backgroundColor: colors.whiteGlass,
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     paddingVertical: 8,
   },
   arrow: { width: 24, height: 24, borderRadius: 8, alignItems: "center", justifyContent: "center" },

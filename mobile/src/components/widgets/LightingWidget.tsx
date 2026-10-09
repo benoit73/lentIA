@@ -1,10 +1,10 @@
 import { StyleSheet, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import Svg, { Defs, LinearGradient as SvgLinearGradient, Polygon, RadialGradient, Rect, Stop } from "react-native-svg";
 import type { ActuatorEvent, AutomationRule, ScheduleThresholdConfig, TimeRange } from "../../api";
 import { DEFAULT_LIGHT_TARGET_HOURS } from "../../config";
 import { colors, tabularNums } from "../../theme";
 import { T } from "../ui";
+import { LightIcon } from "./icons";
 import { SoftPulse, WidgetCard, WidgetPill } from "./WidgetCard";
 
 /** Cumul des minutes éclairées aujourd'hui, en comptant la période en cours
@@ -65,57 +65,35 @@ export function LightingWidget({ on, events, rule, delayMs = 0 }: Props) {
     <WidgetCard
       title="Éclairage horticole"
       subtitle="Cycle lumineux du jour"
-      pill={<WidgetPill>{remainingHours > 0 ? `${formatHours(remainingHours)} restantes` : "Cycle atteint"}</WidgetPill>}
+      pill={
+        <WidgetPill>{remainingHours > 0 ? `${formatHours(remainingHours)} restantes` : "Cycle atteint"}</WidgetPill>
+      }
       delayMs={delayMs}
     >
-      <View style={styles.scene}>
-        {/* Halo : seule partie qui change vraiment quand la lampe s'allume. */}
-        {on && (
-          <SoftPulse style={styles.halo}>
-            <Svg width={224} height={224}>
-              <Defs>
-                <RadialGradient id="halo" cx="50%" cy="50%" r="50%">
-                  <Stop offset="0" stopColor="#FBBF24" stopOpacity={0.55} />
-                  <Stop offset="0.7" stopColor="#FBBF24" stopOpacity={0} />
-                </RadialGradient>
-              </Defs>
-              <Rect width={224} height={224} fill="url(#halo)" />
-            </Svg>
-          </SoftPulse>
-        )}
-        <View style={{ alignItems: "center" }}>
-          <View style={[styles.cord, { backgroundColor: on ? colors.amber300 : colors.slate300 }]} />
-          <LinearGradient colors={on ? [colors.white, colors.amber50] : [colors.white, colors.slate100]} style={styles.shade}>
-            <T weight="extrabold" size={11} color={on ? colors.amber600 : colors.textMuted} style={{ letterSpacing: 0.6 }}>
+      {/* Version compacte de la scène du web (abat-jour + cône de lumière) :
+          l'icône s'éclaire et pulse quand la lampe est allumée. */}
+      <View style={styles.panel}>
+        <View style={styles.head}>
+          <View style={styles.iconWrap}>
+            {on && <SoftPulse style={styles.glow} />}
+            <View style={[styles.icon, { backgroundColor: on ? colors.amber100 : colors.slate100 }]}>
+              <LightIcon color={on ? colors.amber600 : colors.textMuted} size={22} />
+            </View>
+          </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <T
+              weight="extrabold"
+              size={10}
+              color={on ? colors.amber600 : colors.textMuted}
+              style={{ letterSpacing: 0.6 }}
+            >
               {on ? "LAMPE ALLUMÉE" : "LAMPE ÉTEINTE"}
             </T>
-          </LinearGradient>
-          {/* Cône de lumière projeté sous l'abat-jour : c'est lui qui fait
-              vraiment « lampe allumée », le halo seul restait plat. */}
-          {on ? (
-            <Svg width={208} height={80}>
-              <Defs>
-                <SvgLinearGradient id="cone" x1="0" y1="0" x2="0" y2="1">
-                  <Stop offset="0" stopColor="#FBBF24" stopOpacity={0.42} />
-                  <Stop offset="0.55" stopColor="#FDE047" stopOpacity={0.12} />
-                  <Stop offset="1" stopColor="#FEF08A" stopOpacity={0} />
-                </SvgLinearGradient>
-              </Defs>
-              <Polygon points="50,0 158,0 208,80 0,80" fill="url(#cone)" />
-            </Svg>
-          ) : (
-            <View style={{ height: 80 }} />
-          )}
+            <T weight="extrabold" size={20} style={tabularNums}>
+              {formatHours(doneHours)} sur {formatHours(targetHours)}
+            </T>
+          </View>
         </View>
-      </View>
-
-      <View style={styles.panel}>
-        <T weight="extrabold" size={11} color={colors.textSecondary} style={{ textTransform: "uppercase", letterSpacing: 0.5 }}>
-          Exposition lumineuse
-        </T>
-        <T weight="extrabold" size={24} style={[{ marginTop: 4 }, tabularNums]}>
-          {formatHours(doneHours)} sur {formatHours(targetHours)}
-        </T>
 
         <View style={styles.track}>
           <LinearGradient
@@ -135,36 +113,17 @@ export function LightingWidget({ on, events, rule, delayMs = 0 }: Props) {
             {ranges.length > 0 ? `Fin prévue ${ranges[ranges.length - 1].end}` : "—"}
           </T>
         </View>
-        <T size={11} color={colors.textSecondary} style={{ marginTop: 8 }}>
-          Cycle cible de {formatHours(targetHours)} pour la croissance des lentilles.
-        </T>
       </View>
     </WidgetCard>
   );
 }
 
 const styles = StyleSheet.create({
-  scene: {
-    marginTop: 16,
-    height: 168,
-    borderRadius: 16,
-    backgroundColor: colors.whiteGlass,
-    overflow: "hidden",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  halo: { position: "absolute", width: 224, height: 224 },
-  cord: { width: 2, height: 40, borderRadius: 1 },
-  shade: {
-    width: 160,
-    height: 56,
-    borderTopLeftRadius: 80,
-    borderTopRightRadius: 80,
-    alignItems: "center",
-    justifyContent: "flex-end",
-    paddingBottom: 10,
-  },
-  panel: { marginTop: 16, borderRadius: 16, backgroundColor: colors.whiteGlass, padding: 16 },
-  track: { marginTop: 12, height: 10, borderRadius: 999, backgroundColor: "rgba(226,232,240,0.9)", overflow: "hidden" },
+  panel: { marginTop: 14, borderRadius: 16, backgroundColor: colors.whiteGlass, padding: 14 },
+  head: { flexDirection: "row", alignItems: "center", gap: 12 },
+  iconWrap: { alignItems: "center", justifyContent: "center" },
+  glow: { position: "absolute", width: 52, height: 52, borderRadius: 26, backgroundColor: "rgba(252,211,77,0.45)" },
+  icon: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  track: { marginTop: 12, height: 8, borderRadius: 999, backgroundColor: "rgba(226,232,240,0.9)", overflow: "hidden" },
   row: { marginTop: 8, flexDirection: "row", justifyContent: "space-between", gap: 8 },
 });

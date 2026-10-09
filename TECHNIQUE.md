@@ -470,6 +470,12 @@ Différences avec le web :
 
 - **Navigation** : les 6 pages défilent au doigt avec des onglets en bas
   (pas de cylindre 3D) ; le header reste fixe.
+- **Dashboard resserré** pour limiter le défilement : chances de survie
+  (anneau + 2 conseils côte à côte), une carte **Mesures** qui regroupe
+  réservoir, humidité du sol, température et humidité de l'air en tuiles 2×2
+  (barre + cible IA, une touche ouvre l'historique du capteur), les
+  actionneurs en lignes compactes, l'éclairage sans la scène de lampe, puis
+  les prochaines actions.
 - **Connexion Google native** (Credential Manager / Google Play Services),
   le bouton GIS du web ne fonctionnant pas dans une app. L'ID token a pour
   audience le Client ID **web** : l'API le vérifie comme celui du dashboard.

@@ -16,12 +16,10 @@ import { useAuth } from "../../auth/AuthContext";
 import { Page } from "../../components/Page";
 import { SectionTitle } from "../../components/ui";
 import { ActuatorsWidget } from "../../components/widgets/ActuatorsWidget";
-import { ClimateWidget } from "../../components/widgets/ClimateWidget";
 import { LightingWidget } from "../../components/widgets/LightingWidget";
+import { MeasuresWidget } from "../../components/widgets/MeasuresWidget";
 import { NextActionsWidget } from "../../components/widgets/NextActionsWidget";
-import { SoilMoistureWidget } from "../../components/widgets/SoilMoistureWidget";
 import { SurvivalRingWidget } from "../../components/widgets/SurvivalRingWidget";
-import { WaterTankWidget } from "../../components/widgets/WaterTankWidget";
 import { ACTUATOR_POLL_MS } from "../../config";
 import { usePolling } from "../../hooks/usePolling";
 
@@ -104,13 +102,13 @@ export default function Dashboard() {
   return (
     <Page>
       <SectionTitle>Vue d'ensemble</SectionTitle>
-      <WaterTankWidget delayMs={0} />
-      <LightingWidget on={states.light?.state ?? false} events={events} rule={rules.light} delayMs={60} />
-      <SurvivalRingWidget chancePct={chancePct} recommendations={recommendations} delayMs={120} />
-      <ClimateWidget recommendations={recommendations} delayMs={180} />
-      <SoilMoistureWidget events={events} recommendations={recommendations} delayMs={240} />
-      <ActuatorsWidget states={states} pending={pending} onToggle={handleToggle} error={actuatorError} delayMs={300} />
-      <NextActionsWidget rules={rules} delayMs={360} />
+      {/* Version resserrée du dashboard web : réservoir, climat et sol
+          regroupés en une grille de tuiles pour limiter le défilement. */}
+      <SurvivalRingWidget chancePct={chancePct} recommendations={recommendations} delayMs={0} />
+      <MeasuresWidget events={events} recommendations={recommendations} delayMs={60} />
+      <ActuatorsWidget states={states} pending={pending} onToggle={handleToggle} error={actuatorError} delayMs={120} />
+      <LightingWidget on={states.light?.state ?? false} events={events} rule={rules.light} delayMs={180} />
+      <NextActionsWidget rules={rules} delayMs={240} />
     </Page>
   );
 }

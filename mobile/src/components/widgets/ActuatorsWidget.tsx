@@ -21,8 +21,8 @@ export function ActuatorsWidget({ states, pending, onToggle, error, delayMs = 0 
   return (
     <WidgetCard
       title="Actionneurs"
-      subtitle="Pilotage direct — les règles peuvent reprendre la main"
-      pill={<LinkText onPress={() => router.navigate("/automatisation")}>Automatisation →</LinkText>}
+      subtitle="Les règles peuvent reprendre la main"
+      pill={<LinkText onPress={() => router.navigate("/automatisation")}>Règles →</LinkText>}
       delayMs={delayMs}
     >
       {error && (
@@ -38,31 +38,36 @@ export function ActuatorsWidget({ states, pending, onToggle, error, delayMs = 0 
           const Icon = ACTUATOR_ICONS[actuator.key];
 
           return (
-            <View key={actuator.key} style={[styles.tile, { backgroundColor: on ? colors.white : "rgba(255,255,255,0.5)" }]}>
-              <View style={styles.tileHeader}>
-                <View style={styles.iconWrap}>
-                  {on && <SoftPulse style={styles.glow} />}
-                  <View style={[styles.icon, { backgroundColor: on ? colors.amber100 : colors.slate100 }]}>
-                    {Icon && <Icon color={on ? colors.amber600 : colors.textMuted} />}
-                  </View>
+            <View
+              key={actuator.key}
+              style={[styles.tile, { backgroundColor: on ? colors.white : "rgba(255,255,255,0.5)" }]}
+            >
+              <View style={styles.iconWrap}>
+                {on && <SoftPulse style={styles.glow} />}
+                <View style={[styles.icon, { backgroundColor: on ? colors.amber100 : colors.slate100 }]}>
+                  {Icon && <Icon color={on ? colors.amber600 : colors.textMuted} size={18} />}
                 </View>
-                <ToggleSwitch
-                  checked={on}
-                  onChange={(next) => onToggle(actuator.key, next)}
-                  disabled={pending === actuator.key}
-                  label={actuator.label}
-                />
               </View>
 
-              <T weight="bold" size={14} style={{ marginTop: 12 }}>
-                {actuator.label}
-              </T>
-              <T weight="bold" size={11} color={on ? colors.emerald600 : colors.textMuted}>
-                {on ? "Allumé" : "Éteint"}
-              </T>
-              <T size={11} color={colors.textSecondary} style={{ marginTop: 2 }}>
-                {current?.updated_at ? formatRelativeToNow(current.updated_at) : "jamais commandé"}
-              </T>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <T weight="bold" size={13} numberOfLines={1}>
+                  {actuator.label}
+                </T>
+                <T size={11} color={colors.textSecondary} numberOfLines={1}>
+                  <T weight="bold" size={11} color={on ? colors.emerald600 : colors.textMuted}>
+                    {on ? "Allumé" : "Éteint"}
+                  </T>
+                  {" · "}
+                  {current?.updated_at ? formatRelativeToNow(current.updated_at) : "jamais commandé"}
+                </T>
+              </View>
+
+              <ToggleSwitch
+                checked={on}
+                onChange={(next) => onToggle(actuator.key, next)}
+                disabled={pending === actuator.key}
+                label={actuator.label}
+              />
             </View>
           );
         })}
@@ -72,10 +77,18 @@ export function ActuatorsWidget({ states, pending, onToggle, error, delayMs = 0 
 }
 
 const styles = StyleSheet.create({
-  grid: { marginTop: 16, flexDirection: "row", flexWrap: "wrap", gap: 12 },
-  tile: { flexGrow: 1, flexBasis: "45%", borderRadius: 16, padding: 14 },
-  tileHeader: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 8 },
+  // Une ligne par actionneur : la grille 2×2 du web laisse des tuiles trop
+  // étroites pour icône + libellé + interrupteur sur un téléphone.
+  grid: { marginTop: 14, gap: 8 },
+  tile: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
   iconWrap: { alignItems: "center", justifyContent: "center" },
-  glow: { position: "absolute", width: 44, height: 44, borderRadius: 22, backgroundColor: "rgba(252,211,77,0.4)" },
-  icon: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  glow: { position: "absolute", width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(252,211,77,0.4)" },
+  icon: { width: 34, height: 34, borderRadius: 11, alignItems: "center", justifyContent: "center" },
 });
