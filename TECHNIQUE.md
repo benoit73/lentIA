@@ -147,7 +147,7 @@ de données déjà exposées par l'API, sans nouvelle route :
 
 | Widget | Source |
 |---|---|
-| Réservoir d'eau | `water_level` en temps réel ; les litres viennent de `WATER_TANK_LITERS` (`web/src/config.ts`, 5 L) puisque le capteur ne renvoie qu'un % |
+| Réservoir d'eau | `water_level` en temps réel ; les litres viennent de `WATER_TANK_LITERS` (`web/src/config.ts` et `mobile/src/config.ts`, 0,4 L, affichés en cL) puisque le capteur ne renvoie qu'un % |
 | Éclairage horticole | somme des périodes `light` allumées aujourd'hui (`/api/actuators/events`, période en cours comptée jusqu'à maintenant) sur la cible = total des plages de la règle, sinon `DEFAULT_LIGHT_TARGET_HOURS` |
 | Chances de survie | `/api/prediction/germination` + les 2 capteurs les plus loin de leur cible `/api/prediction/recommendations` |
 | Climat / Humidité du sol | valeurs temps réel + repère sur la cible IA ; « dernier arrosage » vient du journal des actionneurs |

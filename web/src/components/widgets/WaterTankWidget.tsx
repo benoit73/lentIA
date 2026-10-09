@@ -3,8 +3,10 @@ import { WATER_TANK_LITERS } from "../../config";
 import { useSensorRealtime } from "../../hooks/useSensorRealtime";
 import { WidgetCard, WidgetPill } from "./WidgetCard";
 
+// Petit réservoir (40 cL) : en litres à une décimale, tout s'afficherait
+// « 0,4 L » / « 0,3 L » — on affiche donc en centilitres.
 function formatLiters(liters: number): string {
-  return `${liters.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} L`;
+  return `${Math.round(liters * 100)} cL`;
 }
 
 export function WaterTankWidget({ delayMs = 0, className }: { delayMs?: number; className?: string }) {
@@ -18,7 +20,7 @@ export function WaterTankWidget({ delayMs = 0, className }: { delayMs?: number; 
     <WidgetCard
       title="Réservoir d'eau"
       subtitle="Capteur de niveau · mesure en temps réel"
-      pill={<WidgetPill>{liters === null ? "— L restants" : `${formatLiters(liters)} restants`}</WidgetPill>}
+      pill={<WidgetPill>{liters === null ? "— cL restants" : `${formatLiters(liters)} restants`}</WidgetPill>}
       delayMs={delayMs}
       className={className}
     >
@@ -52,7 +54,7 @@ export function WaterTankWidget({ delayMs = 0, className }: { delayMs?: number; 
       </div>
 
       <div className="mt-2 flex items-center justify-between gap-2 text-[11px] font-medium text-theme-textMuted">
-        <span>0 L</span>
+        <span>0 cL</span>
         <span>
           {liters === null ? "En attente de relevé" : `${formatLiters(liters)} disponibles sur ${formatLiters(WATER_TANK_LITERS)}`}
         </span>

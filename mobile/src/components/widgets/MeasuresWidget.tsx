@@ -100,7 +100,8 @@ export function MeasuresWidget({ events, recommendations, delayMs = 0 }: Props) 
           min={0}
           max={100}
           caption={(pct) =>
-            `${fr((Math.max(0, Math.min(100, pct)) / 100) * WATER_TANK_LITERS)} L sur ${fr(WATER_TANK_LITERS)} L`
+            // Petit réservoir (40 cL) : affiché en centilitres plutôt qu'en litres.
+            `${Math.round(Math.max(0, Math.min(100, pct)) * WATER_TANK_LITERS)} cL sur ${Math.round(WATER_TANK_LITERS * 100)} cL`
           }
         />
         <Tile
