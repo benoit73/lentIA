@@ -29,7 +29,7 @@ CAMERA_PINS = {"scl": 10, "sda": 11, "vsync": 12, "href": 13, "pclk": 14, "d0": 
 
 # HC-SR04 (niveau du reservoir) : distance capteur -> eau, en cm, a calibrer
 # sur le reservoir reel.
-RESERVOIR_FULL_CM = 5.0    # distance quand le reservoir est plein (eau haute, distance courte)
+RESERVOIR_FULL_CM = 8.0    # distance quand le reservoir est plein (eau haute, distance courte)
 RESERVOIR_EMPTY_CM = 14.0  # distance quand le reservoir est vide = hauteur du capteur au-dessus du fond
 
 # Broches des actionneurs. Lampe (relais) sur GP28 et pompe a eau sur GP18
