@@ -647,6 +647,10 @@ l'utilisateur connecté, `source: "manual"`) puis publie sur
 (voir section Automatisation ci-dessous) passent par `api/automation.py`,
 jamais par cette route.
 
+Allumer `watering` alors que le réservoir est vide renvoie **409**
+`{"error": "Réservoir vide : remplis-le avant d'arroser."}` (voir
+`RESERVOIR_EMPTY_PCT`), message affiché tel quel par le web et l'app.
+
 ```bash
 curl -X POST -H "Authorization: Bearer $ID_TOKEN" -H "Content-Type: application/json" \
   -d '{"on": true}' http://localhost:5000/api/actuators/light/toggle
@@ -811,6 +815,14 @@ Sur le Pico, copier **`main.py` et `hm01b0.py`** (driver de la caméra).
 - `AUTOMATION_AVERAGE_WINDOW_MINUTES` (défaut 10) règle la fenêtre de moyenne
   utilisée par les règles à seuil — fixe pour toutes les règles, pas
   configurable individuellement.
+- `RESERVOIR_EMPTY_PCT` (défaut 0) et `WATER_LEVEL_MAX_AGE_SECONDS` (défaut
+  120) : **sécurité pompe**. Quand le dernier relevé de `water_level` (s'il
+  date de moins de `WATER_LEVEL_MAX_AGE_SECONDS`) est ≤ `RESERVOIR_EMPTY_PCT`,
+  l'arrosage manuel est refusé (409), aucune règle ne peut l'allumer, et une
+  pompe déjà allumée est éteinte au tour d'automatisation suivant
+  (événement `source: "auto"`). Sans relevé récent, rien n'est bloqué. Le
+  Pico applique la même règle de son côté et coupe la pompe dès la mesure
+  suivante, même sans l'API.
 - `PREDICTION_WINDOW_MINUTES` (défaut 1440) est la fenêtre des moyennes
   envoyées au modèle de prédiction. À ne pas raccourcir sans ré-entraîner :
   le modèle apprend sur des moyennes journalières.

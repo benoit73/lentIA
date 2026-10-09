@@ -29,7 +29,15 @@ from datetime import datetime, time as dtime, timezone
 
 import db
 import mqtt_ingest
-from config import ACTUATOR_FIELDS, AUTOMATION_AVERAGE_WINDOW_MINUTES, AUTOMATION_POLL_SECONDS
+from config import (
+    ACTUATOR_FIELDS,
+    AUTOMATION_AVERAGE_WINDOW_MINUTES,
+    AUTOMATION_POLL_SECONDS,
+    RESERVOIR_EMPTY_PCT,
+    WATER_LEVEL_MAX_AGE_SECONDS,
+)
+
+PUMP = "watering"
 
 
 def _parse_hhmm(value: str) -> dtime:
@@ -97,10 +105,26 @@ def _schedule_threshold_desired_state(config: dict, now_local: datetime):
     return average > config["threshold"] if comparator == "above" else average < config["threshold"]
 
 
+def reservoir_empty() -> bool:
+    """True si le dernier niveau récent du réservoir est à vide. Sans relevé
+    récent on ne bloque pas : capteur hors ligne ne veut pas dire vide."""
+    level = db.fetch_latest_reading("water_level", WATER_LEVEL_MAX_AGE_SECONDS)
+    return level is not None and level <= RESERVOIR_EMPTY_PCT
+
+
 def evaluate_once():
     rules = db.fetch_automation_rules()
     states = db.fetch_actuator_states()
     now_local = datetime.now()
+    pump_blocked = reservoir_empty()
+
+    # Pompe allumée (manuellement ou par une règle) alors que le réservoir
+    # est vide : le Pico l'a déjà coupée, on aligne l'état et le journal.
+    if pump_blocked and states.get(PUMP, {}).get("state"):
+        db.insert_actuator_event(PUMP, False, None, source="auto")
+        mqtt_ingest.publish_actuator_command(PUMP, False)
+        states[PUMP] = {**states[PUMP], "state": False}
+        print(f"[automation] {PUMP} -> OFF (réservoir vide)")
 
     for actuator in ACTUATOR_FIELDS:
         rule = rules.get(actuator)
@@ -120,6 +144,9 @@ def evaluate_once():
             desired = _schedule_threshold_desired_state(rule["config"], now_local)
         else:
             continue
+
+        if actuator == PUMP and desired and pump_blocked:
+            continue  # réservoir vide : la règle reprendra quand il sera rempli
 
         if desired is None or desired == currently_on:
             continue

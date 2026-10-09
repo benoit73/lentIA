@@ -60,7 +60,8 @@ flowchart LR
 
 - Voir l'état du bac **en direct** : mesures, caméra, capteurs hors ligne
 - Consulter l'**historique** de chaque capteur sous forme de courbes
-- **Piloter** la lampe et la pompe à la main
+- **Piloter** la lampe et la pompe à la main (la pompe se coupe toute seule
+  quand le réservoir est vide)
 - Programmer des **automatisations** : plages horaires ou seuils
 - Lire les **chances de survie** prédites par l'IA, avec des conseils
   (« monte l'humidité du sol à 68 % »)

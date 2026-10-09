@@ -161,6 +161,25 @@ def fetch_actuator_events(
     return rows
 
 
+def fetch_latest_reading(sensor: str, max_age_seconds: int):
+    """Dernière valeur d'un capteur si elle date de moins de
+    `max_age_seconds`, sinon `None`."""
+    if sensor not in SENSOR_FIELDS:
+        raise ValueError(f"capteur inconnu : {sensor}")
+
+    query = sql.SQL(
+        "SELECT {field} FROM readings "
+        "WHERE {field} IS NOT NULL AND created_at >= now() - (%s * INTERVAL '1 second') "
+        "ORDER BY created_at DESC LIMIT 1"
+    ).format(field=sql.Identifier(sensor))
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(query, (max_age_seconds,))
+            row = cur.fetchone()
+    return row[0] if row else None
+
+
 def fetch_sensor_average(sensor: str, window_minutes: int):
     """Moyenne d'un capteur sur les `window_minutes` dernières minutes.
     `None` si aucun relevé sur cette fenêtre."""

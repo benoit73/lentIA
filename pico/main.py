@@ -43,6 +43,11 @@ ACTUATOR_PINS = {
 # Beaucoup de modules relais s'activent a l'etat BAS : si un actionneur fait
 # l'inverse de ce qu'affiche le dashboard, ajouter son nom ici, ex. {"light"}.
 ACTUATOR_ACTIVE_LOW = set()
+
+# Securite pompe : refusee / coupee quand le reservoir est vide, pour ne
+# jamais la faire tourner a sec (meme si l'API ou le WiFi ne repondent plus).
+POMPE = "watering"
+NIVEAU_VIDE_PCT = 0.0
 # ========================
 
 
@@ -80,6 +85,20 @@ def appliquer_actionneur(nom, etat):
     actuator_pins[nom].value(actif if etat else 1 - actif)
 
 
+def actionneur_allume(nom):
+    actif = 0 if nom in ACTUATOR_ACTIVE_LOW else 1
+    return actuator_pins[nom].value() == actif
+
+
+# Dernier niveau du reservoir mesure (%), None tant qu'aucune mesure valide :
+# sans mesure on ne bloque pas la pompe (capteur debranche != reservoir vide).
+dernier_niveau_eau = None
+
+
+def reservoir_vide():
+    return dernier_niveau_eau is not None and dernier_niveau_eau <= NIVEAU_VIDE_PCT
+
+
 for nom in actuator_pins:
     appliquer_actionneur(nom, False)  # tout eteint au demarrage
 
@@ -97,6 +116,9 @@ def on_actuator_command(topic, msg):
     try:
         etat = ujson.loads(msg)
     except ValueError:
+        return
+    if actionneur == POMPE and etat and reservoir_vide():
+        print("Pompe refusee : reservoir vide")
         return
     appliquer_actionneur(actionneur, etat)
     print("Actionneur", actionneur, "->", "ON" if etat else "OFF")
@@ -240,7 +262,12 @@ while True:
         # Un topic par capteur (lentia/sensors/<capteur>), une valeur JSON
         # par message. None -> "null" pour les capteurs pas encore cables
         # (l'API les enregistre alors comme NULL en base).
-        for capteur, valeur in lire_capteurs().items():
+        mesures = lire_capteurs()
+        dernier_niveau_eau = mesures["water_level"]
+        if reservoir_vide() and actionneur_allume(POMPE):
+            appliquer_actionneur(POMPE, False)
+            print("Pompe coupee : reservoir vide")
+        for capteur, valeur in mesures.items():
             publier("%s/%s" % (MQTT_TOPIC_PREFIX, capteur), ujson.dumps(valeur))
 
     if camera is not None and time.ticks_diff(maintenant, derniere_image) >= CAMERA_INTERVAL_MS:

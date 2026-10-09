@@ -91,7 +91,10 @@ export function Dashboard() {
       await toggleActuator(token, key, next);
       await loadLive();
     } catch (err) {
-      setActuatorError("Impossible de changer l'état de l'actionneur.");
+      // 409 : refus métier (ex. réservoir vide), le message de l'API est parlant.
+      setActuatorError(
+        err instanceof ApiError && err.status === 409 ? err.message : "Impossible de changer l'état de l'actionneur.",
+      );
       if (err instanceof ApiError && err.status === 401) signOut();
       loadLive();
     } finally {

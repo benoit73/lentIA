@@ -47,7 +47,13 @@ le MCP3004 pour `temperature`).
 | ECHO   | GP1         | Retour d'écho, distance capteur → surface de l'eau |
 
 Topic : `lentia/sensors/water_level`. Calibrer `RESERVOIR_FULL_CM` /
-`RESERVOIR_EMPTY_CM` dans `main.py` selon la profondeur réelle du réservoir.
+`RESERVOIR_EMPTY_CM` dans `main.py` selon la profondeur réelle du réservoir
+(capteur actuellement à 14 cm du fond).
+
+**Sécurité pompe** : quand le niveau mesuré tombe à 0 %, le Pico coupe la
+pompe (`watering`) et refuse de la rallumer tant que le réservoir n'est pas
+rempli, même si la commande vient du dashboard. Un capteur sans écho
+(`None`) ne bloque pas la pompe.
 
 ## Actionneurs (relais)
 

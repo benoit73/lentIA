@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 from flask import Blueprint, g, jsonify, request
 
+import automation
 import camera
 import db
 import mqtt_ingest
@@ -105,6 +106,9 @@ def toggle_actuator(actuator):
     state = payload.get("on")
     if not isinstance(state, bool):
         return jsonify({"error": "corps JSON attendu : {\"on\": true|false}"}), 400
+
+    if actuator == automation.PUMP and state and automation.reservoir_empty():
+        return jsonify({"error": "Réservoir vide : remplis-le avant d'arroser."}), 409
 
     # Toujours "manual" ici : les commandes automatiques passent par
     # automation.py, jamais par cette route.

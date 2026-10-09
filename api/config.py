@@ -43,6 +43,13 @@ AUTOMATION_POLL_SECONDS = int(os.environ.get("AUTOMATION_POLL_SECONDS", "30"))
 # plus configurable par règle (simplifie l'UI : une seule fenêtre pour tous).
 AUTOMATION_AVERAGE_WINDOW_MINUTES = int(os.environ.get("AUTOMATION_AVERAGE_WINDOW_MINUTES", "10"))
 
+# Sécurité pompe : l'arrosage est refusé (et coupé s'il tourne) quand le
+# dernier niveau du réservoir est à ce pourcentage ou en dessous. Un relevé
+# plus vieux que WATER_LEVEL_MAX_AGE_SECONDS est ignoré : capteur hors ligne
+# ne veut pas dire réservoir vide. Le Pico applique la même règle de son côté.
+RESERVOIR_EMPTY_PCT = float(os.environ.get("RESERVOIR_EMPTY_PCT", "0"))
+WATER_LEVEL_MAX_AGE_SECONDS = int(os.environ.get("WATER_LEVEL_MAX_AGE_SECONDS", "120"))
+
 # Fenêtre (minutes) des moyennes envoyées au modèle de prédiction. Il est
 # entraîné sur des moyennes journalières (voir ia/train_model.py) : lui
 # passer un relevé instantané n'aurait pas de sens, la luminosité vaut 0 la
