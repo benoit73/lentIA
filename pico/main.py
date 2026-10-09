@@ -157,9 +157,12 @@ echo = Pin(1, Pin.IN)
 trig.value(0)
 
 
-def lire_distance_hcsr04():
-    """Distance capteur -> obstacle (eau), en cm. None si pas d'echo (hors
-    de portee ou capteur deconnecte)."""
+HCSR04_MIN_CM = 2.0        # en dessous, le HC-SR04 ne mesure rien de fiable
+HCSR04_NB_MESURES = 3
+HCSR04_PAUSE_MS = 60       # delai conseille entre deux mesures (echos residuels)
+
+
+def mesure_hcsr04_unique():
     trig.value(0)
     time.sleep_us(2)
     trig.value(1)
@@ -169,7 +172,27 @@ def lire_distance_hcsr04():
         duree_us = time_pulse_us(echo, 1, 30000)  # timeout 30ms (~5m max)
     except OSError:
         return None
+    if duree_us < 0:  # timeout de time_pulse_us (-1 / -2)
+        return None
     return duree_us / 58  # vitesse du son ~343 m/s, aller-retour
+
+
+def lire_distance_hcsr04():
+    """Distance capteur -> obstacle (eau), en cm : mediane de plusieurs
+    mesures, pour ignorer les echos parasites (parois du reservoir) qui
+    faisaient sauter le niveau de 0 a 100 %. None si aucune mesure valide
+    (hors de portee ou capteur deconnecte)."""
+    mesures = []
+    for i in range(HCSR04_NB_MESURES):
+        if i:
+            time.sleep_ms(HCSR04_PAUSE_MS)
+        d = mesure_hcsr04_unique()
+        if d is not None and d >= HCSR04_MIN_CM:
+            mesures.append(d)
+    if not mesures:
+        return None
+    mesures.sort()
+    return mesures[len(mesures) // 2]
 
 
 def distance_vers_niveau(distance_cm):
