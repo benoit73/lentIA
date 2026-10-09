@@ -44,6 +44,7 @@ services:
       DATABASE_URL: postgresql://lentia:lentia@postgres:5432/lentia
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       ALLOWED_EMAILS: ${ALLOWED_EMAILS}
+      LUMINOSITY_LUX_PER_PCT: ${LUMINOSITY_LUX_PER_PCT:-10}
     ports:
       - "5000:5000"   # API REST (protégée par OAuth) + WebSocket
     restart: unless-stopped

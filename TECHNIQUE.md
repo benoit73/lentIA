@@ -330,7 +330,7 @@ sens.
 
 ```bash
 curl -H "Authorization: Bearer $ID_TOKEN" http://localhost:5000/api/prediction/germination
-# {"chance_pct": 57.8, "window_minutes": 1440, "based_on": {"temperature": 25.34, "soil_humidity": 23.24, "luminosity": 52.53, "air_humidity": 54.72}}
+# {"chance_pct": 57.8, "window_minutes": 1440, "based_on": {"temperature": 25.34, "soil_humidity": 23.24, "luminosity": 525.3, "air_humidity": 54.72}}
 ```
 
 Renvoie `503` si un des 4 capteurs n'a rien relevé sur la fenêtre.
@@ -348,12 +348,10 @@ les autres capteurs restant à leur moyenne actuelle. C'est une
 recommandation locale par capteur ("vise Y % d'humidité du sol dans les
 conditions actuelles"), pas une optimisation jointe.
 
-**Un capteur n'apparaît que s'il constitue un vrai levier** : si l'amener à
-sa meilleure valeur rapporte moins de `MIN_RECOMMENDATION_GAIN_PCT` points
-(8 par défaut, `api/prediction.py`), aucune cible n'est renvoyée. Dans ce
+**Chaque capteur reçoit une cible**, même quand le gain est faible : dans ce
 dataset, température et humidité du sol pèsent des dizaines de points, alors
-que luminosité et humidité de l'air oscillent de quelques points sans signal
-exploitable — ce seuil évite d'inventer une cible sur une courbe plate.
+que luminosité et humidité de l'air n'en rapportent que quelques-uns.
+`gain_pct` (jamais négatif) indique à quel point la cible compte.
 
 ```bash
 curl -H "Authorization: Bearer $ID_TOKEN" http://localhost:5000/api/prediction/recommendations
@@ -837,6 +835,14 @@ Sur le Pico, copier **`main.py` et `hm01b0.py`** (driver de la caméra).
   (événement `source: "auto"`). Sans relevé récent, rien n'est bloqué. Le
   Pico applique la même règle de son côté et coupe la pompe dès la mesure
   suivante, même sans l'API.
+- `LUMINOSITY_LUX_PER_PCT` (défaut 10) : le Pico envoie la luminosité en %
+  de la plage de son capteur (0-100), pas en lux. L'API la convertit à la
+  réception MQTT (`lux = % × facteur`, donc 100 % ≈ 1000 lux) avant de
+  l'enregistrer et de la diffuser : base, dashboard, seuil de la règle
+  lumière et modèle IA (entraîné en lux) sont tous en lux. Approximation
+  linéaire faute d'étalonnage — à ajuster avec un luxmètre. Les relevés
+  enregistrés avant cette conversion (le 2026-10-09) ont été multipliés par
+  10 en base.
 - `PREDICTION_WINDOW_MINUTES` (défaut 1440) est la fenêtre des moyennes
   envoyées au modèle de prédiction. À ne pas raccourcir sans ré-entraîner :
   le modèle apprend sur des moyennes journalières.

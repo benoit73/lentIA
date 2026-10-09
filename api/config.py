@@ -36,6 +36,14 @@ ACTUATOR_FIELDS = [
     "ventilation",
 ]
 
+# Le Pico envoie la luminosité en % de la plage de son capteur (0-100), pas
+# en lux. On ne peut plus le reflasher : l'API convertit donc à la réception
+# (lux = % × ce facteur) avant d'enregistrer et de diffuser, pour que la
+# base, le dashboard, le seuil de la lumière et le modèle IA (entraîné en
+# lux) parlent tous en lux. Approximation linéaire (100 % ≈ 1000 lux) faute
+# d'étalonnage du capteur : ajuster ce facteur avec un luxmètre si besoin.
+LUMINOSITY_LUX_PER_PCT = float(os.environ.get("LUMINOSITY_LUX_PER_PCT", "10"))
+
 # Intervalle (secondes) entre deux évaluations des règles d'automatisation.
 AUTOMATION_POLL_SECONDS = int(os.environ.get("AUTOMATION_POLL_SECONDS", "30"))
 

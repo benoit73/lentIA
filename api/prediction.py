@@ -32,14 +32,6 @@ def predict_germination_chance(temperature, humidite_sol, luminosite, humidite_a
 
 _GRID_POINTS = 121
 
-# En dessous de ce gain (en points de % de pousse), on n'affiche pas de
-# cible. Dans ce dataset, température et humidité du sol pèsent des dizaines
-# de points, tandis que luminosité et humidité de l'air oscillent de quelques
-# points sans vrai signal : ce seuil ne laisse passer que les leviers réels
-# plutôt que d'inventer une cible sur une courbe quasi plate.
-MIN_RECOMMENDATION_GAIN_PCT = 8.0
-
-
 def recommend_values(current: dict) -> dict:
     """Pour chaque capteur, balaie la plage observée à l'entraînement pour
     trouver la valeur qui maximise la prédiction, les autres capteurs restant
@@ -66,9 +58,11 @@ def recommend_values(current: dict) -> dict:
 
         predictions = np.clip(model.predict(rows), 0, 100)
         best_index = int(np.argmax(predictions))
-        gain = float(predictions[best_index]) - baseline
-        if gain < MIN_RECOMMENDATION_GAIN_PCT:
-            continue
+        # Une cible pour chaque capteur, même quand le gain est faible
+        # (luminosité, humidité de l'air) : le gain affiché dit à quel point
+        # elle compte. Jamais négatif : la grille ne contient pas forcément
+        # la valeur actuelle exacte.
+        gain = max(0.0, float(predictions[best_index]) - baseline)
 
         recommendations[sensor] = {
             "recommended_value": round(float(grid[best_index]), 1),

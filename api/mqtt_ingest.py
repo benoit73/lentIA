@@ -11,7 +11,15 @@ import paho.mqtt.client as mqtt
 
 import camera
 import db
-from config import ACTUATOR_TOPIC_PREFIX, CAMERA_TOPIC, MQTT_HOST, MQTT_PORT, MQTT_SUBSCRIBE_TOPIC, SENSOR_FIELDS
+from config import (
+    ACTUATOR_TOPIC_PREFIX,
+    CAMERA_TOPIC,
+    LUMINOSITY_LUX_PER_PCT,
+    MQTT_HOST,
+    MQTT_PORT,
+    MQTT_SUBSCRIBE_TOPIC,
+    SENSOR_FIELDS,
+)
 from realtime import broadcaster
 
 _client = None
@@ -45,6 +53,10 @@ def on_message(client, userdata, msg):
     except (json.JSONDecodeError, UnicodeDecodeError) as err:
         print(f"[mqtt] message ignoré (JSON invalide) : {err}")
         return
+
+    # Le Pico envoie un % du capteur : conversion en lux (voir config.py).
+    if sensor == "luminosity" and isinstance(value, (int, float)):
+        value = round(value * LUMINOSITY_LUX_PER_PCT, 1)
 
     try:
         db.insert_reading(sensor, value)
