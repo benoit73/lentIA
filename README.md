@@ -31,6 +31,7 @@ Raspberry Pi, capteurs et réseau de neurones).
 | `ws.py`             | Routes WebSocket, une par capteur                                     |
 | `auth.py`           | Vérification des ID tokens Google (OAuth) : décorateur `require_auth` pour le REST, `verify_token` pour le WebSocket |
 | `automation.py`     | Thread de fond : évalue les règles d'automatisation toutes les ~30s   |
+| `camera.py`         | Images de la caméra : décode le message MQTT brut, encode en JPEG, garde la dernière image et la diffuse aux WebSocket |
 | `prediction.py`     | Charge le réseau de neurones entraîné (`ia/train_model.py`), prédit le % de chances de pousse et recommande des valeurs cibles par capteur |
 | `app.py`            | Point d'entrée : assemble l'app Flask, démarre le client MQTT et le thread d'automatisation |
 
@@ -43,6 +44,7 @@ Raspberry Pi, capteurs et réseau de neurones).
 | `src/pages/Dashboard.tsx`       | Page d'accueil : grille de widgets (réservoir, éclairage, survie IA, climat, sol, actionneurs, prochaines actions) |
 | `src/pages/HistoryPage.tsx`     | Grille des 5 capteurs avec courbes + sélecteur de plage (l'ancienne page d'accueil) |
 | `src/pages/ControlPage.tsx`     | Page « Contrôle » : actionneurs, aperçu du journal, retour caméra |
+| `src/pages/CameraPage.tsx`      | Page « Caméra » : image en direct en grand, résolution, bouton « Enregistrer l'image » |
 | `src/pages/JournalPage.tsx`     | Journal complet : filtre par actionneur + plage, durée de chaque état |
 | `src/pages/AutomationPage.tsx`  | Configuration des règles pour lumière (plage + seuil de luminosité), arrosage, ventilation, chauffage (plage horaire multi-plages ou seuil, au choix) |
 | `src/pages/SensorDetail.tsx`    | Détail d'un capteur : graphe + sélecteur de plage d'historique   |
@@ -53,7 +55,7 @@ Raspberry Pi, capteurs et réseau de neurones).
 | `src/components/SensorCard.tsx` | Carte capteur de la page Historique : valeur, état, cible IA, mini-courbe |
 | `src/components/ActuatorPanel.tsx` | Tableau lumière/chauffage/arrosage/ventilation (juste les interrupteurs) |
 | `src/components/JournalPreview.tsx` | Aperçu des dernières actions dans la page Contrôle, lien vers le journal complet |
-| `src/components/CameraPanel.tsx`   | Emplacement retour caméra (placeholder tant qu'il n'y a pas de caméra) |
+| `src/components/CameraPanel.tsx`, `CameraView.tsx` | Retour caméra en direct (badge « En direct »/« Hors ligne », images/s) ; `useCameraStream` (hook) ouvre le WebSocket `/ws/camera` |
 | `src/hooks/`                    | `useSensorHistory`/`useSensorRealtime`/`useLiveSeries` (capteurs), `usePolling` (actionneurs/journal) |
 | `src/api.ts`                    | Client API (fetch + URL WebSocket), toujours en chemins relatifs |
 | `nginx.conf`                    | Sert le build statique + relaie `/api` et `/ws` vers `api:5000`  |
@@ -65,8 +67,8 @@ SDK 57) — voir [Application Android](#application-android-react-native).
 
 | Dossier/fichier                  | Rôle                                                            |
 |------------------------------------|------------------------------------------------------------------|
-| `src/app/`                          | Routes (Expo Router) : `_layout.tsx` (polices, session, routes protégées), `sign-in.tsx`, `(tabs)/` (les 5 pages), `sensors/[sensor].tsx` (détail capteur) |
-| `src/app/(tabs)/_layout.tsx`        | Header fixe (`TopBar`) + pages Dashboard/Historique/Contrôle/Journal/Automatisation qu'on fait défiler au doigt, onglets en bas — l'équivalent mobile du carrousel 3D |
+| `src/app/`                          | Routes (Expo Router) : `_layout.tsx` (polices, session, routes protégées), `sign-in.tsx`, `(tabs)/` (les 6 pages), `sensors/[sensor].tsx` (détail capteur) |
+| `src/app/(tabs)/_layout.tsx`        | Header fixe (`TopBar`) + pages Dashboard/Historique/Contrôle/Caméra/Journal/Automatisation qu'on fait défiler au doigt, onglets en bas — l'équivalent mobile du carrousel 3D |
 | `src/auth/`                         | Connexion Google native (`@react-native-google-signin/google-signin`), session en SecureStore, renouvellement silencieux du token |
 | `src/components/`                   | Mêmes composants que le web (widgets, cartes capteur, actionneurs, journal, éditeurs de règles), en composants React Native |
 | `src/components/chart.ts`, `Sparkline.tsx`, `SensorChart.tsx` | Courbes en SVG (remplacent Recharts) : axe temporel réel, ligne cassée sur les trous, valeur au toucher |
@@ -156,12 +158,12 @@ et beaucoup plus stables).
 
 ## Actionneurs (lumière, chauffage, arrosage, ventilation)
 
-Pas de matériel branché pour l'instant, mais le circuit complet existe déjà
-côté logiciel : le dashboard (page **Contrôle**) peut activer/désactiver les
-4 actionneurs (à la main, ou via des règles d'automatisation — voir plus
+La **lampe** (relais sur GP28) et la **pompe d'arrosage** (GP18) sont
+câblées ; le chauffage et la ventilation ne le sont pas encore. Le circuit
+est le même pour les 4 : le dashboard (page **Contrôle**) les
+active/désactive (à la main, ou via des règles d'automatisation — voir plus
 bas), l'API enregistre chaque commande en base et la publie sur MQTT, et le
-firmware Pico (`pico/main.py`) s'y abonne déjà pour piloter les relais dès
-qu'ils seront câblés.
+firmware Pico (`pico/main.py`) pilote la broche correspondante.
 
 Un topic de commande par actionneur, sous le préfixe `lentia/actuators/` :
 
@@ -181,8 +183,9 @@ lentia/actuators/watering/set  -> false
 ```
 
 Le Pico s'abonne à `lentia/actuators/+/set` et met à jour la broche du relais
-correspondant (`ACTUATOR_PINS` dans `pico/main.py`, à adapter au câblage
-réel). Il n'y a pour l'instant **aucun retour physique** : l'état affiché
+correspondant (`ACTUATOR_PINS` dans `pico/main.py` ; un relais actif à
+l'état bas s'ajoute à `ACTUATOR_ACTIVE_LOW`). Il n'y a **aucun retour
+physique** : l'état affiché
 dans le dashboard est celui de la dernière commande envoyée, pas une
 confirmation matérielle.
 
@@ -316,7 +319,7 @@ curl -H "Authorization: Bearer $ID_TOKEN" http://localhost:5000/api/prediction/g
 
 Renvoie `503` si un des 4 capteurs n'a rien relevé sur la fenêtre.
 
-Le dashboard affiche ce % dans un badge au centre du header (`SurvivalChanceBadge.tsx`), rafraîchi toutes les 10s, coloré selon la valeur (rouge < 33%, orange 33-66%, vert ≥ 66%) — visible sur les 4 pages du carrousel puisque le header est commun.
+Le dashboard affiche ce % dans un badge au centre du header (`SurvivalChanceBadge.tsx`), rafraîchi toutes les 10s, coloré selon la valeur (rouge < 33%, orange 33-66%, vert ≥ 66%) — visible sur toutes les pages du carrousel puisque le header est commun.
 
 ### Valeurs recommandées par capteur
 
@@ -423,7 +426,8 @@ Puis ouvrir : **http://localhost**
   `/ws/sensors/<capteur>`. L'API garde la connexion MQTT en interne (le
   navigateur ne parle jamais directement au broker).
 - Navigation : **Dashboard** (widgets), **Historique** (courbes par capteur),
-  **Contrôle** (actionneurs + caméra), **Journal** (historique des commandes)
+  **Contrôle** (actionneurs + caméra), **Caméra** (image en direct),
+  **Journal** (historique des commandes)
   et **Automatisation** (règles) tournent dans un carrousel 3D — glisse à la souris ou au doigt, utilise
   les flèches gauche/droite, ou clique sur l'onglet en bas de l'écran. Le
   rebouclage est continu : de la dernière page à la première (et
@@ -455,14 +459,14 @@ données stockées).
 ## Application Android (React Native)
 
 `mobile/` est une app Expo qui reprend toutes les pages du dashboard :
-Dashboard (widgets), Historique, Contrôle, Journal, Automatisation et le
+Dashboard (widgets), Historique, Contrôle, Caméra, Journal, Automatisation et le
 détail de chaque capteur, avec le même temps réel (WebSocket) et le même
 polling. Elle parle directement à l'API de la VM : React Native n'a pas de
 CORS, l'API n'a donc rien à changer.
 
 Différences avec le web :
 
-- **Navigation** : les 5 pages défilent au doigt avec des onglets en bas
+- **Navigation** : les 6 pages défilent au doigt avec des onglets en bas
   (pas de cylindre 3D) ; le header reste fixe.
 - **Connexion Google native** (Credential Manager / Google Play Services),
   le bouton GIS du web ne fonctionnant pas dans une app. L'ID token a pour
@@ -688,6 +692,44 @@ curl -H "Authorization: Bearer $ID_TOKEN" "http://localhost:5000/api/actuators/e
 ]
 ```
 
+## Caméra
+
+Une caméra **Arducam HM01B0** (monochrome, mode 1 bit) est branchée sur le
+Pico (broches dans [`pico/README.md`](pico/README.md), driver
+`pico/hm01b0.py`). Chaîne complète :
+
+1. Le Pico capture une image 324 × 244, la réduit en **162 × 122** (moyenne
+   de 2×2 pixels) et la publie jusqu'à 4 fois par seconde sur
+   `lentia/camera/frame`. Message **binaire** : 4 octets d'en-tête
+   (largeur, hauteur, uint16 big-endian) puis un octet de gris par pixel
+   (~19,8 Ko).
+2. L'API (`camera.py`) valide le message, l'encode en JPEG (Pillow), garde
+   la dernière image en mémoire (rien en base) et la pousse aux clients.
+3. Le dashboard (page **Caméra** et panneau de la page **Contrôle**) et
+   l'app mobile affichent le flux, avec un badge « Hors ligne » au-delà de
+   5 s sans image.
+
+### `GET /api/camera/latest`
+
+Dernière image reçue (protégée par OAuth) ; `503` si le Pico n'en a encore
+envoyé aucune depuis le démarrage de l'API.
+
+```json
+{
+  "width": 162,
+  "height": 122,
+  "received_at": "2026-10-09T14:03:12.481022+00:00",
+  "jpeg": "/9j/4AAQSkZJRgABAQAAAQABAAD..."
+}
+```
+
+### `ws://<host>:5000/ws/camera?token=<id_token>`
+
+Même objet JSON, une image par message (la dernière connue est envoyée dès
+l'ouverture). Un client trop lent saute des images plutôt que d'accumuler
+du retard. `jpeg` s'affiche directement avec
+`<img src="data:image/jpeg;base64,...">`.
+
 ## WebSocket temps réel
 
 `ws://<host>:5000/ws/sensors/<capteur>?token=<id_token>` pousse chaque
@@ -729,10 +771,12 @@ directement sur les topics `lentia/sensors/<capteur>`, sur
 Rien d'autre à changer : l'API et le dashboard fonctionnent déjà avec
 n'importe quelle source qui respecte ce format.
 
-Pour les actionneurs (lumière, chauffage, arrosage, ventilation) : câble les relais sur
-les broches définies dans `ACTUATOR_PINS` (`pico/main.py`, à adapter à ton
-montage), rien d'autre à changer côté logiciel — le Pico écoute déjà
-`lentia/actuators/+/set`.
+Pour les actionneurs : lampe (GP28) et pompe (GP18) sont câblées ; pour le
+chauffage et la ventilation, câble les relais sur les broches définies dans
+`ACTUATOR_PINS` (`pico/main.py`), rien d'autre à changer côté logiciel — le
+Pico écoute déjà `lentia/actuators/+/set`.
+
+Sur le Pico, copier **`main.py` et `hm01b0.py`** (driver de la caméra).
 
 ## Notes
 

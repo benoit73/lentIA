@@ -4,6 +4,9 @@ Résumé des broches utilisées par `main.py`. Tout est déjà câblé/testé sa
 mention contraire ; les valeurs viennent directement du code (source de
 vérité si ça diverge un jour de ce fichier).
 
+Fichiers à copier sur le Pico : **`main.py`** et **`hm01b0.py`** (driver de
+la caméra, importé par `main.py`).
+
 ## Capteurs (via MCP3004, SPI0)
 
 | Capteur                    | Canal MCP3004 | Topic MQTT                          | Statut |
@@ -50,12 +53,44 @@ Topic : `lentia/sensors/water_level`. Calibrer `RESERVOIR_FULL_CM` /
 
 | Actionneur   | Broche Pico | Topic de commande                     | Statut |
 |--------------|:-----------:|-----------------------------------------|--------|
-| Lumière      | GP16        | `lentia/actuators/light/set`           | **pas câblé** |
+| Lumière (lampe, via relais) | GP28 | `lentia/actuators/light/set`     | câblé |
 | Chauffage    | GP17        | `lentia/actuators/heating/set`         | **pas câblé** |
-| Arrosage     | GP18        | `lentia/actuators/watering/set`        | **pas câblé** |
+| Arrosage (pompe à eau) | GP18 | `lentia/actuators/watering/set`     | câblé |
 | Ventilation  | GP19        | `lentia/actuators/ventilation/set`     | **pas câblé** |
 
-Le firmware écoute déjà ces topics et pilote la broche correspondante
-(`ACTUATOR_PINS` dans `main.py`) — il ne manque que le câblage des relais.
-Aucun retour matériel : l'état affiché côté dashboard est celui de la
+Le firmware écoute ces topics et pilote la broche correspondante
+(`ACTUATOR_PINS` dans `main.py`), à l'état haut pour « allumé ». Beaucoup de
+modules relais s'activent au contraire à l'état **bas** : si la lampe
+s'allume quand le dashboard dit « éteint » (et inversement), ajouter son nom
+à `ACTUATOR_ACTIVE_LOW`, ex. `{"light"}`. Tout est éteint au démarrage du
+Pico. Aucun retour matériel : l'état affiché côté dashboard est celui de la
 dernière commande envoyée, pas une confirmation physique.
+
+## Caméra (Arducam HM01B0, monochrome)
+
+| Signal module | Broche Pico | Rôle                                       |
+|---------------|:-----------:|---------------------------------------------|
+| SCL           | GP10        | Configuration du capteur (I2C, adresse 0x24) |
+| SDA           | GP11        | Configuration du capteur (I2C)              |
+| VSYNC         | GP12        | Début d'image                                |
+| HREF          | GP13        | Ligne valide                                 |
+| PCLK          | GP14        | Horloge pixel                                |
+| D0            | GP15        | Données (mode 1 bit : 8 coups de PCLK par pixel) |
+
+Topic : `lentia/camera/frame` (binaire : 4 octets largeur/hauteur puis les
+pixels en niveaux de gris, voir le README racine, section « Caméra »).
+
+- Le driver (`hm01b0.py`) reprend la configuration du driver C officiel
+  d'Arducam ; la capture se fait en PIO + DMA (machine d'état 0 du PIO0,
+  `CAMERA_PINS` dans `main.py`).
+- I2C **logiciel** : dans ce sens (SCL sur GP10, SDA sur GP11), les broches
+  ne correspondent à aucun bus I2C matériel du Pico. Inverser les deux fils
+  ne gênerait pas le driver tant que `CAMERA_PINS` suit.
+- Image lue en 324 × 244, réduite à **162 × 122** avant envoi, au plus 4
+  images/s (`CAMERA_INTERVAL_MS`). Le buffer (79 Ko) est alloué au tout
+  début de `main.py`, avant le WiFi, pour trouver assez de RAM contiguë.
+- Au démarrage, la console affiche `Camera HM01B0 prete`, ou `Camera
+  indisponible` avec la raison (capteur qui ne répond pas en I2C, RAM...) :
+  le reste du firmware (capteurs, actionneurs) continue alors sans caméra.
+  `Camera : aucune image recue` en boucle = le capteur répond mais aucune
+  image n'arrive (vérifier VSYNC/HREF/PCLK/D0).

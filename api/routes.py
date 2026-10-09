@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 from flask import Blueprint, g, jsonify, request
 
+import camera
 import db
 import mqtt_ingest
 import prediction
@@ -259,6 +260,15 @@ def _validate_rule_payload(rule_type, config):
         return None
 
     return jsonify({"error": "rule_type doit être 'schedule', 'threshold' ou 'schedule_threshold'"}), 400
+
+
+@bp.route("/api/camera/latest")
+@require_auth
+def camera_latest():
+    frame = camera.latest_frame()
+    if frame is None:
+        return jsonify({"error": "aucune image reçue de la caméra"}), 503
+    return jsonify(frame)
 
 
 @bp.route("/api/automation/rules")

@@ -1,9 +1,11 @@
 from machine import Pin, SPI, time_pulse_us
 from dht import DHT22
+import gc
 import network
 import time
 import ujson
 from umqtt.simple import MQTTClient
+from hm01b0 import HM01B0
 
 # ===== A REMPLACER =====
 WIFI_SSID = "LentIA"
@@ -16,21 +18,46 @@ MQTT_USER = None                   # None si le broker n'a pas d'authentificatio
 MQTT_PASSWORD = None
 MQTT_TOPIC_PREFIX = "lentia/sensors"  # un topic par capteur : lentia/sensors/<capteur>
 ACTUATOR_TOPIC_PREFIX = "lentia/actuators"  # commandes : lentia/actuators/<actionneur>/set
+CAMERA_TOPIC = "lentia/camera/frame"   # images de la camera (binaire, voir hm01b0.py)
+
+SENSOR_INTERVAL_MS = 1000   # une mesure de chaque capteur par seconde
+CAMERA_INTERVAL_MS = 250    # au plus 4 images/s (limite aussi le trafic WiFi)
+
+# Camera Arducam HM01B0 (mode 1 bit). SCL/SDA en I2C logiciel : GP10/GP11
+# ne correspondent pas a un bus I2C materiel dans ce sens-la.
+CAMERA_PINS = {"scl": 10, "sda": 11, "vsync": 12, "href": 13, "pclk": 14, "d0": 15}
 
 # HC-SR04 (niveau du reservoir) : distance capteur -> eau, en cm, a calibrer
 # sur le reservoir reel.
 RESERVOIR_FULL_CM = 5.0    # distance quand le reservoir est plein (eau haute, distance courte)
 RESERVOIR_EMPTY_CM = 25.0  # distance quand le reservoir est vide (eau basse, distance longue)
 
-# Broches des relais actionneurs - pas encore cables, a adapter au montage
-# reel (relais actif a l'etat haut suppose ici).
+# Broches des actionneurs. Lampe (relais) sur GP28 et pompe a eau sur GP18
+# cablees ; chauffage et ventilation pas encore.
 ACTUATOR_PINS = {
-    "light": 16,
+    "light": 28,
     "heating": 17,
     "watering": 18,
     "ventilation": 19,
 }
+# Beaucoup de modules relais s'activent a l'etat BAS : si un actionneur fait
+# l'inverse de ce qu'affiche le dashboard, ajouter son nom ici, ex. {"light"}.
+ACTUATOR_ACTIVE_LOW = set()
 # ========================
+
+
+# Camera creee en premier : son buffer d'image (79 Ko) doit etre alloue
+# tant que la RAM n'est pas encore fragmentee par le WiFi et le MQTT.
+gc.collect()
+camera = None
+try:
+    camera = HM01B0(**CAMERA_PINS)
+    camera.demarrer()
+    print("Camera HM01B0 prete")
+except (OSError, MemoryError) as e:
+    print("Camera indisponible, on continue sans :", e)
+    camera = None
+    gc.collect()
 
 
 def connect_wifi():
@@ -46,26 +73,32 @@ def connect_wifi():
 
 
 actuator_pins = {nom: Pin(broche, Pin.OUT) for nom, broche in ACTUATOR_PINS.items()}
-for pin in actuator_pins.values():
-    pin.value(0)
+
+
+def appliquer_actionneur(nom, etat):
+    actif = 0 if nom in ACTUATOR_ACTIVE_LOW else 1
+    actuator_pins[nom].value(actif if etat else 1 - actif)
+
+
+for nom in actuator_pins:
+    appliquer_actionneur(nom, False)  # tout eteint au demarrage
 
 
 def on_actuator_command(topic, msg):
     """Callback MQTT : lentia/actuators/<actionneur>/set -> actionne le
-    relais correspondant. Prepare pour quand le materiel sera cable."""
+    relais (ou la pompe) correspondant."""
     topic = topic.decode()
     prefixe = ACTUATOR_TOPIC_PREFIX + "/"
     if not topic.startswith(prefixe):
         return
     actionneur = topic[len(prefixe):].split("/")[0]
-    pin = actuator_pins.get(actionneur)
-    if pin is None:
+    if actionneur not in actuator_pins:
         return
     try:
         etat = ujson.loads(msg)
     except ValueError:
         return
-    pin.value(1 if etat else 0)
+    appliquer_actionneur(actionneur, etat)
     print("Actionneur", actionneur, "->", "ON" if etat else "OFF")
 
 
@@ -149,10 +182,7 @@ def lire_dht22():
     return dht_derniere_humidite
 
 
-connect_wifi()
-mqtt = connect_mqtt()
-
-while True:
+def lire_capteurs():
     brut = lire_mcp3004(0)  # canal 0 - LM35
     tension = brut * 3.3 / 1023
     temperature = tension * 100
@@ -176,9 +206,6 @@ while True:
           "|| Distance:", distance, "cm | Niveau eau:", niveau_eau, "%",
           "|| Humidite air:", humidite_air, "%")
 
-    # Un topic par capteur (lentia/sensors/<capteur>), une valeur JSON par
-    # message. None -> "null" pour les capteurs pas encore cables (l'API les
-    # enregistre alors comme NULL en base plutot que de ne rien envoyer).
     readings = {
         "temperature": round(temperature, 1),
         "soil_humidity": round(humidite, 1),
@@ -186,13 +213,43 @@ while True:
         "luminosity": round(luminosite, 1),
         "water_level": round(niveau_eau, 1) if niveau_eau is not None else None,
     }
+    return readings
 
-    for capteur, valeur in readings.items():
-        try:
-            mqtt.publish("%s/%s" % (MQTT_TOPIC_PREFIX, capteur), ujson.dumps(valeur))
-        except OSError as e:
-            print("Erreur MQTT, reconnexion...", e)
-            mqtt = connect_mqtt()
+
+def publier(topic, payload):
+    """Publie un message, en se reconnectant au broker si besoin."""
+    global mqtt
+    try:
+        mqtt.publish(topic, payload)
+    except OSError as e:
+        print("Erreur MQTT, reconnexion...", e)
+        mqtt = connect_mqtt()
+
+
+connect_wifi()
+mqtt = connect_mqtt()
+
+derniere_mesure = time.ticks_add(time.ticks_ms(), -SENSOR_INTERVAL_MS)
+derniere_image = time.ticks_ms()
+
+while True:
+    maintenant = time.ticks_ms()
+
+    if time.ticks_diff(maintenant, derniere_mesure) >= SENSOR_INTERVAL_MS:
+        derniere_mesure = maintenant
+        # Un topic par capteur (lentia/sensors/<capteur>), une valeur JSON
+        # par message. None -> "null" pour les capteurs pas encore cables
+        # (l'API les enregistre alors comme NULL en base).
+        for capteur, valeur in lire_capteurs().items():
+            publier("%s/%s" % (MQTT_TOPIC_PREFIX, capteur), ujson.dumps(valeur))
+
+    if camera is not None and time.ticks_diff(maintenant, derniere_image) >= CAMERA_INTERVAL_MS:
+        derniere_image = maintenant
+        image = camera.capturer()
+        if image is None:
+            print("Camera : aucune image recue (cablage ?)")
+        else:
+            publier(CAMERA_TOPIC, image)
 
     try:
         mqtt.check_msg()  # traite les commandes actionneurs recues (non bloquant)
@@ -200,4 +257,4 @@ while True:
         print("Erreur MQTT (check_msg), reconnexion...", e)
         mqtt = connect_mqtt()
 
-    time.sleep(1)
+    time.sleep_ms(10)

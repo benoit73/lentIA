@@ -62,6 +62,18 @@ export function sensorWebSocketUrl(sensor: string, token: string): string {
   return `${API_BASE_URL.replace(/^http/, "ws")}/ws/sensors/${sensor}?token=${encodeURIComponent(token)}`;
 }
 
+/** Image de la caméra du bac (HM01B0), JPEG en niveaux de gris. */
+export interface CameraFrame {
+  width: number;
+  height: number;
+  received_at: string;
+  jpeg: string; // base64
+}
+
+export function cameraWebSocketUrl(token: string): string {
+  return `${API_BASE_URL.replace(/^http/, "ws")}/ws/camera?token=${encodeURIComponent(token)}`;
+}
+
 export interface ActuatorState {
   state: boolean;
   updated_at: string | null;

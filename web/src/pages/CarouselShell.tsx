@@ -2,6 +2,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { PageCylinder } from "../components/PageCylinder";
 import { TopBar } from "../components/TopBar";
 import { AutomationPage } from "./AutomationPage";
+import { CameraPage } from "./CameraPage";
 import { ControlPage } from "./ControlPage";
 import { Dashboard } from "./Dashboard";
 import { HistoryPage } from "./HistoryPage";
@@ -15,6 +16,7 @@ export function CarouselShell() {
     { path: "/", label: "Dashboard", node: <Dashboard /> },
     { path: "/historique", label: "Historique", node: <HistoryPage /> },
     { path: "/controle", label: "Contrôle", node: <ControlPage /> },
+    { path: "/camera", label: "Caméra", node: <CameraPage /> },
     { path: "/journal", label: "Journal", node: <JournalPage /> },
     { path: "/automatisation", label: "Automatisation", node: <AutomationPage /> },
   ];

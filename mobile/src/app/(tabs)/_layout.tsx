@@ -33,6 +33,7 @@ export default function TabsLayout() {
         <TopTabs.Screen name="index" options={{ title: "Dashboard" }} />
         <TopTabs.Screen name="historique" options={{ title: "Historique" }} />
         <TopTabs.Screen name="controle" options={{ title: "Contrôle" }} />
+        <TopTabs.Screen name="camera" options={{ title: "Caméra" }} />
         <TopTabs.Screen name="journal" options={{ title: "Journal" }} />
         <TopTabs.Screen name="automatisation" options={{ title: "Automatisation" }} />
       </TopTabs>

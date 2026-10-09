@@ -20,9 +20,13 @@ SENSOR_FIELDS = [
     "water_level",
 ]
 
-# Un topic de commande par actionneur, ex. lentia/actuators/light/set.
-# Pas de matériel branché pour l'instant : la commande est publiée sur MQTT
-# et enregistrée en base, prête pour quand le Pico pilotera les relais.
+# Images de la caméra HM01B0 du Pico : message binaire, 4 octets d'en-tête
+# (largeur, hauteur en big-endian) puis un octet de gris par pixel.
+CAMERA_TOPIC = os.environ.get("CAMERA_TOPIC", "lentia/camera/frame")
+
+# Un topic de commande par actionneur, ex. lentia/actuators/light/set. Le
+# Pico s'y abonne et pilote la broche correspondante (lampe et pompe câblées,
+# chauffage et ventilation pas encore).
 ACTUATOR_TOPIC_PREFIX = os.environ.get("ACTUATOR_TOPIC_PREFIX", "lentia/actuators")
 
 ACTUATOR_FIELDS = [

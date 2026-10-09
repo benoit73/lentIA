@@ -1,5 +1,6 @@
 """Client MQTT interne à l'API : s'abonne à lentia/sensors/+, persiste chaque
-relevé en base et le diffuse aux abonnés temps réel (routes WebSocket).
+relevé en base et le diffuse aux abonnés temps réel (routes WebSocket). Reçoit
+aussi les images de la caméra (lentia/camera/frame, voir camera.py).
 Le même client sert aussi à publier les commandes d'actionneurs
 (lentia/actuators/<actionneur>/set) envoyées depuis le dashboard."""
 
@@ -8,8 +9,9 @@ import time
 
 import paho.mqtt.client as mqtt
 
+import camera
 import db
-from config import ACTUATOR_TOPIC_PREFIX, MQTT_HOST, MQTT_PORT, MQTT_SUBSCRIBE_TOPIC, SENSOR_FIELDS
+from config import ACTUATOR_TOPIC_PREFIX, CAMERA_TOPIC, MQTT_HOST, MQTT_PORT, MQTT_SUBSCRIBE_TOPIC, SENSOR_FIELDS
 from realtime import broadcaster
 
 _client = None
@@ -18,13 +20,20 @@ _client = None
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
         print(f"[mqtt] connecté au broker {MQTT_HOST}:{MQTT_PORT}")
-        client.subscribe(MQTT_SUBSCRIBE_TOPIC)
-        print(f"[mqtt] abonné au topic '{MQTT_SUBSCRIBE_TOPIC}'")
+        client.subscribe([(MQTT_SUBSCRIBE_TOPIC, 0), (CAMERA_TOPIC, 0)])
+        print(f"[mqtt] abonné aux topics '{MQTT_SUBSCRIBE_TOPIC}' et '{CAMERA_TOPIC}'")
     else:
         print(f"[mqtt] échec de connexion, code {rc}")
 
 
 def on_message(client, userdata, msg):
+    if msg.topic == CAMERA_TOPIC:
+        try:
+            camera.handle_frame(msg.payload)
+        except Exception as err:  # on ne veut jamais tuer le thread MQTT
+            print(f"[camera] image ignorée : {err}")
+        return
+
     sensor = msg.topic.rsplit("/", 1)[-1]
     if sensor not in SENSOR_FIELDS:
         print(f"[mqtt] topic inconnu ignoré : {msg.topic}")

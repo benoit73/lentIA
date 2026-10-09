@@ -10,6 +10,7 @@ export default function App() {
         <Route path="/" element={<CarouselShell />} />
         <Route path="/historique" element={<CarouselShell />} />
         <Route path="/controle" element={<CarouselShell />} />
+        <Route path="/camera" element={<CarouselShell />} />
         <Route path="/journal" element={<CarouselShell />} />
         <Route path="/automatisation" element={<CarouselShell />} />
         <Route path="/sensors/:sensor" element={<SensorDetail />} />
