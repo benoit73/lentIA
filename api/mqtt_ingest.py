@@ -22,6 +22,7 @@ def on_connect(client, userdata, flags, rc):
         print(f"[mqtt] connecté au broker {MQTT_HOST}:{MQTT_PORT}")
         client.subscribe([(MQTT_SUBSCRIBE_TOPIC, 0), (CAMERA_TOPIC, 0)])
         print(f"[mqtt] abonné aux topics '{MQTT_SUBSCRIBE_TOPIC}' et '{CAMERA_TOPIC}'")
+        _publish_current_states(client)
     else:
         print(f"[mqtt] échec de connexion, code {rc}")
 
@@ -77,9 +78,30 @@ def start():
     return client
 
 
+def _publish_current_states(client):
+    """Republie l'état en base de chaque actionneur (retained) : le broker a
+    pu perdre ses messages retenus, et une commande envoyée pendant que
+    l'API était arrêtée n'existe qu'en base."""
+    try:
+        states = db.fetch_actuator_states()
+    except Exception as err:  # ne jamais bloquer la connexion MQTT
+        print(f"[mqtt] états actionneurs non republiés : {err}")
+        return
+    for actuator, current in states.items():
+        _publish(client, actuator, current["state"])
+
+
+def _publish(client, actuator: str, state: bool):
+    # retain : le broker garde la dernière commande de chaque actionneur et
+    # la renvoie au Pico dès qu'il se (re)connecte. Sans ça, un Pico qui
+    # redémarre éteint tout alors que la base (donc le dashboard) affiche
+    # toujours l'état commandé.
+    client.publish(f"{ACTUATOR_TOPIC_PREFIX}/{actuator}/set", json.dumps(state), retain=True)
+
+
 def publish_actuator_command(actuator: str, state: bool):
     """Publie une commande sur lentia/actuators/<actionneur>/set. Le Pico
-    (une fois câblé) s'y abonne et actionne le relais correspondant."""
+    s'y abonne et actionne le relais correspondant."""
     if _client is None:
         raise RuntimeError("client MQTT non connecté")
-    _client.publish(f"{ACTUATOR_TOPIC_PREFIX}/{actuator}/set", json.dumps(state))
+    _publish(_client, actuator, state)

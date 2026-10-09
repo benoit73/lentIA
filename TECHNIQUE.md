@@ -191,6 +191,12 @@ physique** : l'état affiché
 dans le dashboard est celui de la dernière commande envoyée, pas une
 confirmation matérielle.
 
+Les commandes sont publiées en **retained** : le broker garde la dernière de
+chaque actionneur et la renvoie au Pico dès qu'il se (re)connecte. Un Pico
+qui redémarre (coupure, nouveau `main.py`) éteint tout puis réapplique
+aussitôt l'état affiché par le dashboard. L'API republie aussi l'état en
+base de chaque actionneur à chaque connexion au broker.
+
 Contrairement aux capteurs, les actionneurs et le journal n'ont pas de canal
 WebSocket dédié : `ActuatorPanel`, `JournalPreview` et `JournalPage`
 repassent chacun toutes les `ACTUATOR_POLL_MS` (`web/src/config.ts`, 5

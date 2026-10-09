@@ -100,7 +100,9 @@ def reservoir_vide():
 
 
 for nom in actuator_pins:
-    appliquer_actionneur(nom, False)  # tout eteint au demarrage
+    # Tout eteint au demarrage ; l'etat voulu arrive juste apres, a
+    # l'abonnement MQTT (commandes publiees en "retained" par l'API).
+    appliquer_actionneur(nom, False)
 
 
 def on_actuator_command(topic, msg):
