@@ -101,21 +101,31 @@ function isValidScheduleThresholdConfig(config: unknown): config is ScheduleThre
   );
 }
 
+// Même si la forme de la règle n'est pas reconnue, on garde son `enabled` :
+// afficher « désactivé » pour une règle que le serveur applique encore
+// laisserait croire à tort que l'automatisation est coupée.
 function toLightForm(rule: AutomationRule | undefined, fallback: LightForm): LightForm {
-  if (!rule || rule.rule_type !== "schedule_threshold") return fallback;
-  if (!isValidScheduleThresholdConfig(rule.config)) return fallback;
-  const config = rule.config;
-  return { enabled: rule.enabled, ranges: config.ranges, minLuminosity: String(config.threshold) };
+  if (!rule) return fallback;
+  if (rule.rule_type === "schedule_threshold" && isValidScheduleThresholdConfig(rule.config)) {
+    const config = rule.config;
+    return { enabled: rule.enabled, ranges: config.ranges, minLuminosity: String(config.threshold) };
+  }
+  // Ancienne règle « plage horaire seule » : on reprend ses plages.
+  const ranges = (rule.config as ScheduleConfig | undefined)?.ranges;
+  if (rule.rule_type === "schedule" && isValidRanges(ranges)) {
+    return { ...fallback, enabled: rule.enabled, ranges };
+  }
+  return { ...fallback, enabled: rule.enabled };
 }
 
 function toFlexibleForm(rule: AutomationRule | undefined, fallback: FlexibleForm): FlexibleForm {
   if (!rule) return fallback;
   if (rule.rule_type === "schedule") {
     const config = rule.config as ScheduleConfig;
-    if (!isValidRanges(config?.ranges)) return fallback;
+    if (!isValidRanges(config?.ranges)) return { ...fallback, enabled: rule.enabled };
     return { ...fallback, enabled: rule.enabled, ruleType: "schedule", ranges: config.ranges };
   }
-  if (!isValidThresholdConfig(rule.config)) return fallback;
+  if (!isValidThresholdConfig(rule.config)) return { ...fallback, enabled: rule.enabled };
   const config = rule.config;
   return {
     ...fallback,
@@ -157,35 +167,37 @@ export function AutomationPage() {
       .finally(() => setLoading(false));
   }, [token, signOut]);
 
-  async function saveLight() {
-    if (!token) return;
-    const threshold = Number(lightForm.minLuminosity);
+  async function saveLight(form: LightForm = lightForm): Promise<boolean> {
+    if (!token) return false;
+    const threshold = Number(form.minLuminosity);
     if (!Number.isFinite(threshold) || threshold < 0) {
       setMessages((m) => ({ ...m, light: "Seuil de luminosité invalide." }));
-      return;
+      return false;
     }
 
     setSavingKey("light");
     setMessages((m) => ({ ...m, light: "" }));
     try {
       await saveAutomationRule(token, "light", {
-        enabled: lightForm.enabled,
+        enabled: form.enabled,
         rule_type: "schedule_threshold",
-        config: { ranges: lightForm.ranges, sensor: "luminosity", comparator: "below", threshold },
+        config: { ranges: form.ranges, sensor: "luminosity", comparator: "below", threshold },
       });
       setMessages((m) => ({ ...m, light: "Enregistré." }));
+      return true;
     } catch (err) {
       setMessages((m) => ({
         ...m,
         light: err instanceof ApiError ? err.message : "Échec de l'enregistrement.",
       }));
+      return false;
     } finally {
       setSavingKey(null);
     }
   }
 
-  async function saveFlexible(actuator: string, form: FlexibleForm) {
-    if (!token) return;
+  async function saveFlexible(actuator: string, form: FlexibleForm): Promise<boolean> {
+    if (!token) return false;
 
     let config: ScheduleConfig | ThresholdConfig;
     if (form.ruleType === "schedule") {
@@ -194,13 +206,13 @@ export function AutomationPage() {
       const threshold = Number(form.threshold.threshold);
       if (!Number.isFinite(threshold)) {
         setMessages((m) => ({ ...m, [actuator]: "Seuil invalide." }));
-        return;
+        return false;
       }
       if (form.threshold.actionMode === "duration") {
         const durationMinutes = Number(form.threshold.durationMinutes);
         if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) {
           setMessages((m) => ({ ...m, [actuator]: "Durée invalide." }));
-          return;
+          return false;
         }
         config = {
           sensor: form.threshold.sensor,
@@ -213,7 +225,7 @@ export function AutomationPage() {
         const targetValue = Number(form.threshold.targetValue);
         if (!Number.isFinite(targetValue)) {
           setMessages((m) => ({ ...m, [actuator]: "Valeur cible invalide." }));
-          return;
+          return false;
         }
         config = {
           sensor: form.threshold.sensor,
@@ -230,14 +242,26 @@ export function AutomationPage() {
     try {
       await saveAutomationRule(token, actuator, { enabled: form.enabled, rule_type: form.ruleType, config });
       setMessages((m) => ({ ...m, [actuator]: "Enregistré." }));
+      return true;
     } catch (err) {
       setMessages((m) => ({
         ...m,
         [actuator]: err instanceof ApiError ? err.message : "Échec de l'enregistrement.",
       }));
+      return false;
     } finally {
       setSavingKey(null);
     }
+  }
+
+  // L'interrupteur enregistre tout de suite : sinon il n'agit que sur le
+  // formulaire et la règle continue de tourner côté serveur tant qu'on n'a
+  // pas cliqué sur « Enregistrer ».
+  async function toggleLight(enabled: boolean) {
+    const previous = lightForm;
+    const next = { ...lightForm, enabled };
+    setLightForm(next);
+    if (!(await saveLight(next))) setLightForm(previous);
   }
 
   return (
@@ -267,7 +291,7 @@ export function AutomationPage() {
               </div>
               <ToggleSwitch
                 checked={lightForm.enabled}
-                onChange={(next) => setLightForm((f) => ({ ...f, enabled: next }))}
+                onChange={toggleLight}
                 label="Automatisation lumière"
               />
             </div>
@@ -288,7 +312,7 @@ export function AutomationPage() {
               <button
                 type="button"
                 disabled={savingKey === "light"}
-                onClick={saveLight}
+                onClick={() => saveLight()}
                 className="px-4 py-2 rounded-xl bg-theme-accent text-white text-xs font-bold disabled:opacity-50"
               >
                 Enregistrer
@@ -302,7 +326,7 @@ export function AutomationPage() {
             description="Seuil sur l'humidité du sol, ou plage(s) horaire(s)"
             form={wateringForm}
             onChange={setWateringForm}
-            onSave={() => saveFlexible("watering", wateringForm)}
+            onSave={(form) => saveFlexible("watering", form)}
             saving={savingKey === "watering"}
             message={messages.watering}
             sensorOptions={[{ value: "soil_humidity", label: "Humidité du sol" }]}
@@ -314,7 +338,7 @@ export function AutomationPage() {
             description="Seuil sur la température ou l'humidité de l'air, ou plage(s) horaire(s)"
             form={ventilationForm}
             onChange={setVentilationForm}
-            onSave={() => saveFlexible("ventilation", ventilationForm)}
+            onSave={(form) => saveFlexible("ventilation", form)}
             saving={savingKey === "ventilation"}
             message={messages.ventilation}
             sensorOptions={[
@@ -329,7 +353,7 @@ export function AutomationPage() {
             description="Seuil sur la température, ou plage(s) horaire(s)"
             form={heatingForm}
             onChange={setHeatingForm}
-            onSave={() => saveFlexible("heating", heatingForm)}
+            onSave={(form) => saveFlexible("heating", form)}
             saving={savingKey === "heating"}
             message={messages.heating}
             sensorOptions={[{ value: "temperature", label: "Température" }]}

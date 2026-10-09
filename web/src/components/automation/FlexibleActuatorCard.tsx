@@ -15,7 +15,9 @@ interface Props {
   description: string;
   form: FlexibleForm;
   onChange: (form: FlexibleForm) => void;
-  onSave: () => void;
+  // Enregistre le formulaire passé et renvoie le succès (l'interrupteur
+  // enregistre immédiatement et revient en arrière en cas d'échec).
+  onSave: (form: FlexibleForm) => Promise<boolean>;
   saving: boolean;
   message?: string;
   sensorOptions: { value: string; label: string }[];
@@ -33,6 +35,12 @@ export function FlexibleActuatorCard({
   sensorOptions,
   unit,
 }: Props) {
+  async function toggle(enabled: boolean) {
+    const next = { ...form, enabled };
+    onChange(next);
+    if (!(await onSave(next))) onChange(form);
+  }
+
   return (
     <div className="bg-theme-card rounded-3xl p-5 shadow-soft-card flex flex-col">
       <div className="flex items-start justify-between gap-3">
@@ -42,7 +50,7 @@ export function FlexibleActuatorCard({
         </div>
         <ToggleSwitch
           checked={form.enabled}
-          onChange={(next) => onChange({ ...form, enabled: next })}
+          onChange={toggle}
           label={`Automatisation ${title.toLowerCase()}`}
         />
       </div>
@@ -87,7 +95,7 @@ export function FlexibleActuatorCard({
         <button
           type="button"
           disabled={saving}
-          onClick={onSave}
+          onClick={() => onSave(form)}
           className="px-4 py-2 rounded-xl bg-theme-accent text-white text-xs font-bold disabled:opacity-50"
         >
           Enregistrer

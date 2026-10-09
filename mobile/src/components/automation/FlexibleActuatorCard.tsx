@@ -18,7 +18,9 @@ interface Props {
   description: string;
   form: FlexibleForm;
   onChange: (form: FlexibleForm) => void;
-  onSave: () => void;
+  // Enregistre le formulaire passé et renvoie le succès (l'interrupteur
+  // enregistre immédiatement et revient en arrière en cas d'échec).
+  onSave: (form: FlexibleForm) => Promise<boolean>;
   saving: boolean;
   message?: string;
   sensorOptions: { value: string; label: string }[];
@@ -31,13 +33,19 @@ const RULE_TYPES: { key: "threshold" | "schedule"; label: string }[] = [
 ];
 
 export function FlexibleActuatorCard({ title, description, form, onChange, onSave, saving, message, sensorOptions, unit }: Props) {
+  async function toggle(enabled: boolean) {
+    const next = { ...form, enabled };
+    onChange(next);
+    if (!(await onSave(next))) onChange(form);
+  }
+
   return (
     <Card>
       <RuleHeader
         title={title}
         description={description}
         enabled={form.enabled}
-        onToggle={(enabled) => onChange({ ...form, enabled })}
+        onToggle={toggle}
       />
 
       <View style={{ marginTop: 16 }}>
@@ -59,7 +67,7 @@ export function FlexibleActuatorCard({ title, description, form, onChange, onSav
         <ScheduleRangesEditor ranges={form.ranges} onChange={(ranges) => onChange({ ...form, ranges })} />
       )}
 
-      <SaveRow onSave={onSave} saving={saving} message={message} />
+      <SaveRow onSave={() => onSave(form)} saving={saving} message={message} />
     </Card>
   );
 }

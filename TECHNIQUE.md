@@ -242,6 +242,14 @@ Chaque actionneur n'a qu'une seule règle active à la fois (activer/désactiver
 + reconfigurer remplace la précédente). Une règle désactivée (`enabled:
 false`) est ignorée par le moteur d'automatisation.
 
+Sur la page Automatisation (web et mobile), l'interrupteur d'une règle
+**enregistre immédiatement** son état `enabled` (avec la configuration
+affichée) ; il revient en arrière si l'enregistrement échoue. Le bouton
+« Enregistrer » sert aux autres réglages (plages, seuils…). L'interrupteur
+reflète toujours le `enabled` stocké en base, même pour une règle d'un
+ancien format (ex. une lumière en `schedule` seul, dont les plages sont
+reprises dans le formulaire).
+
 > Une règle active reprend la main au prochain contrôle (~30s) même après un
 > changement manuel : si tu veux garder le contrôle manuel d'un actionneur,
 > désactive d'abord sa règle sur la page Automatisation.
