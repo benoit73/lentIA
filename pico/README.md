@@ -48,7 +48,7 @@ le MCP3004 pour `temperature`).
 
 Topic : `lentia/sensors/water_level`. Calibrer `RESERVOIR_FULL_CM` /
 `RESERVOIR_EMPTY_CM` dans `main.py` selon la profondeur réelle du réservoir
-(actuellement 0 % = 8 cm du capteur, 100 % = 5 cm).
+(actuellement 0 % = 8 cm du capteur, 100 % = 3 cm).
 
 **Sécurité pompe** : quand le niveau mesuré tombe à 0 %, le Pico coupe la
 pompe (`watering`) et refuse de la rallumer tant que le réservoir n'est pas
